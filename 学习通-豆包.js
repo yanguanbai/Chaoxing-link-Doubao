@@ -211,7 +211,7 @@
             return;
         }
         const bindUrl = GM_getValue("cx_exclusive_url","");
-       if (bindUrl && bindUrl !== location.href) return;
+        if (bindUrl && bindUrl !== location.href) return;
 
         let isWait = false, pollTimer, watchDog, statusDom;
         createPanel();
