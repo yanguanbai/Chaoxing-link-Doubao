@@ -291,7 +291,24 @@
             // 类型判断
             if (data.type === "init") {
                 setSta("加载答题规则");
-                const rule = `严格按要求作答：\n1.仅输出JSON，无多余文字符号,不要题号\n2.单选0 多选1 填空2 判断3 简答4\n3.一题单独一条JSON，严格从上到下顺序输出\n4.标准格式{"type":"0","answer":["B"]}\n5.不会作答，或者有画图题，或者需要手写的输出{"intercept":true}\n６.２，４回答的换行符要按照ＨＴＭＬ的＜ｐ＞`;
+                const rule = `严格按规范输出答案，仅返回JSON格式内容，禁止多余解释、话术、换行修饰
+答题分类与格式标准：
+1.单选题{"type":"0","answer":["选项字母"]}
+示例：{"type":"0","answer":["A"]}
+2.多选题{"type":"1","answer":["A","B"]}
+示例：{"type":"1","answer":["B","C"]}
+3.判断题{"type":"3","answer":["正确/错误"]}
+示例：{"type":"3","answer":["正确"]}
+4.填空题{"type":"2","answer":["填写内容"]}
+示例：{"type":"2","answer":["123"]}
+5.简答题{"type":"4","answer":["作答文字"]}
+示例：{"type":"4","answer":["学习使人进步"]}
+6.无法作答、手写绘图、超纲题目统一返回{"intercept":true}
+
+硬性要求：
+- 一题对应一条独立JSON，多题按顺序罗列数组
+- 只保留标准JSON字符，不要表情、序号、说明文字
+- 简答内容换行用HTML换行标签<br>，适配页面录入格式`;
                 ok = writeText(input, rule);
             } else if (data.type === "img") {
                 setSta("识别图片题目");
@@ -322,7 +339,7 @@
 
         // 无限次手动抓取 —— 修复大数溢出，永远抓最新
         function doCatchAnswer() {
-            setSta("⏳ 手动抓取中...", "#E6A23C");
+            setSta("⏳ 抓取中...", "#E6A23C");
 
             // 每次点击都重新获取全部消息，绝不缓存
             const allMessages = document.querySelectorAll('div[data-message-id]');
