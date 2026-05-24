@@ -143,8 +143,13 @@
                     const answers = JSON.parse(raw);
                     const quesList = getAllQuestions();
                     answers.forEach((ans, idx) => {
-                        if (ans.intercept) return;
-                        // 逐个填写答案，防止过快导致 UI 卡顿
+                        if (ans.intercept) {
+                            // 跳过此题 → 直接触发下一题
+                            if (autoNextCheckbox.checked) {
+                                setTimeout(nextQuestion, 800);
+                            }
+                            return;
+                        }
                         setTimeout(() => {
                             if (quesList[idx]) fillAns(ans, quesList[idx]);
                         }, idx * 1200);
@@ -286,7 +291,7 @@
             // 类型判断
             if (data.type === "init") {
                 setSta("加载答题规则");
-                const rule = `严格按要求作答：\n1.仅输出JSON，无多余文字符号,不要题号\n2.单选0 多选1 填空2 判断3 简答4\n3.一题单独一条JSON，严格从上到下顺序输出\n4.标准格式{"type":"0","answer":["B"]}\n5.不会作答输出{"intercept":true}\n６.２，４回答的换行符要按照ＨＴＭＬの＜ｐ＞`;
+                const rule = `严格按要求作答：\n1.仅输出JSON，无多余文字符号,不要题号\n2.单选0 多选1 填空2 判断3 简答4\n3.一题单独一条JSON，严格从上到下顺序输出\n4.标准格式{"type":"0","answer":["B"]}\n5.不会作答，或者有画图题，或者需要手写的输出{"intercept":true}\n６.２，４回答的换行符要按照ＨＴＭＬ的＜ｐ＞`;
                 ok = writeText(input, rule);
             } else if (data.type === "img") {
                 setSta("识别图片题目");
@@ -341,7 +346,7 @@
 
             // 3. 读取最新内容
             const nowTxt = latestMsg.innerText.trim();
-            const jsArr = nowTxt.match(/\{[^{}]*\}/g)?.filter(v => v.includes('"type"')) || [];
+            const jsArr = nowTxt.match(/\{[^{}]*\}/g)?.filter(v => v.includes('"type"') || v.includes('"intercept"')) || [];
             const resStr = `[${jsArr.join(",")}]`;
 
             try {
