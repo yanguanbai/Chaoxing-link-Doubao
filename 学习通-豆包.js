@@ -84,7 +84,7 @@
 
         // 更新状态提示
         function setStatus(text, color = "#666") {
-            if(statusDiv) {
+            if (statusDiv) {
                 statusDiv.innerText = text;
                 statusDiv.style.color = color;
             }
@@ -93,7 +93,7 @@
         // 获取页面内所有题目元素
         function getAllQuestions() {
             const items = Array.from(document.querySelectorAll('.questionLi'));
-            return items.sort((a,b)=>a.getBoundingClientRect().top - b.getBoundingClientRect().top);
+            return items.sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
         }
 
         // 获取文字并发送给豆包
@@ -125,28 +125,28 @@
 
         // 通过 GM_setValue 发送信号给豆包端脚本
         function sendSignal(data) {
-            GM_setValue("cx_ai_signal", JSON.stringify({...data, ts: Date.now()}));
+            GM_setValue("cx_ai_signal", JSON.stringify({ ...data, ts: Date.now() }));
         }
 
         // 监听豆包端返回的答案
         function listenAnswer() {
             GM_addValueChangeListener("cx_ai_result", (_, oldVal, val) => {
-                if(!val || val === oldVal) return;
+                if (!val || val === oldVal) return;
                 const [raw] = val.split("|_|");
                 try {
                     const answers = JSON.parse(raw);
                     const quesList = getAllQuestions();
                     answers.forEach((ans, idx) => {
-                        if(ans.intercept) return;
+                        if (ans.intercept) return;
                         // 逐个填写答案，防止过快导致 UI 卡顿
-                        setTimeout(()=>{
-                            if(quesList[idx]) fillAns(ans, quesList[idx]);
+                        setTimeout(() => {
+                            if (quesList[idx]) fillAns(ans, quesList[idx]);
                         }, idx * 1200);
                     });
                     // 执行自动下一题
-                    if(autoNextCheckbox.checked) setTimeout(nextQuestion, answers.length*1200+2000);
-                }catch(e){
-                    setStatus("答案解析异常","#F56C6C");
+                    if (autoNextCheckbox.checked) setTimeout(nextQuestion, answers.length * 1200 + 2000);
+                } catch (e) {
+                    setStatus("答案解析异常", "#F56C6C");
                 }
             });
         }
@@ -156,42 +156,42 @@
             const type = res.type + "";
             const ansArr = res.answer || [];
             // 处理单选、多选、判断
-            if(["0","1","3"].includes(type)){
+            if (["0", "1", "3"].includes(type)) {
                 const opts = block.querySelectorAll("span.num_option");
-                ansArr.forEach(target=>{
-                    opts.forEach(item=>{
+                ansArr.forEach(target => {
+                    opts.forEach(item => {
                         const d = item.dataset.data?.trim();
                         const t = item.textContent.trim();
-                        if(d===target || t===target){
-                            item.dispatchEvent(new MouseEvent("mousedown",{bubbles:true}));
-                            item.dispatchEvent(new MouseEvent("mouseup",{bubbles:true}));
+                        if (d === target || t === target) {
+                            item.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+                            item.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
                             item.click();
                         }
                     });
                 });
-                setStatus(`已选${ansArr.join("")}`,"#67C23A");
+                setStatus(`已选${ansArr.join("")}`, "#67C23A");
             }
             // 处理简答题
-            else if(["2","4"].includes(type)){
+            else if (["2", "4"].includes(type)) {
                 const content = ansArr.join("\n");
                 const ue = win.UE;
                 const textarea = block.querySelector('textarea[id^="answer"]');
-                if(textarea && ue?.getEditor){
+                if (textarea && ue?.getEditor) {
                     const ed = ue.getEditor(textarea.id);
-                    if(ed?.setContent){
+                    if (ed?.setContent) {
                         ed.setContent(content);
                         ed.fireEvent?.("contentChange");
-                        setStatus("简答填写完成","#67C23A");
+                        setStatus("简答填写完成", "#67C23A");
                         return;
                     }
                 }
                 const editDom = block.querySelector("[contenteditable=true]");
-                if(editDom){
+                if (editDom) {
                     editDom.innerText = content;
-                    editDom.dispatchEvent(new Event("input",{bubbles:true}));
-                }else if(textarea){
+                    editDom.dispatchEvent(new Event("input", { bubbles: true }));
+                } else if (textarea) {
                     textarea.value = content;
-                    textarea.dispatchEvent(new Event("input",{bubbles:true}));
+                    textarea.dispatchEvent(new Event("input", { bubbles: true }));
                 }
             }
         }
@@ -199,18 +199,18 @@
         // 自动触发下一题按钮
         function nextQuestion() {
             document.activeElement?.blur();
-            const btn = document.querySelector(".nextBtn,.nextChapter") || [...document.querySelectorAll("button,a")].find(el=>/下一/.test(el.innerText));
+            const btn = document.querySelector(".nextBtn,.nextChapter") || [...document.querySelectorAll("button,a")].find(el => /下一/.test(el.innerText));
             btn?.click();
         }
     }
 
     // --- 豆包模块 ---
     function initDoubao() {
-        if(document.readyState !== "complete"){
-            window.addEventListener("load",initDoubao);
+        if (document.readyState !== "complete") {
+            window.addEventListener("load", initDoubao);
             return;
         }
-        const bindUrl = GM_getValue("cx_exclusive_url","");
+        const bindUrl = GM_getValue("cx_exclusive_url", "");
         if (bindUrl && bindUrl !== location.href) return;
 
         let isWait = false, pollTimer, watchDog, statusDom;
@@ -224,8 +224,8 @@
             p.innerHTML = `<span id="dbSta" style="font-weight:bold;color:#409EFF">● 待命</span><button id="bindBtn" style="margin-left:8px;padding:2px 6px;border:1px solid #ccc;border-radius:3px;">绑定</button>`;
             document.body.appendChild(p);
             statusDom = document.getElementById("dbSta");
-            document.getElementById("bindBtn").onclick = ()=>{
-                GM_setValue("cx_exclusive_url",location.href);
+            document.getElementById("bindBtn").onclick = () => {
+                GM_setValue("cx_exclusive_url", location.href);
                 alert("绑定成功，刷新生效");
             };
 
@@ -234,118 +234,145 @@
             document.getElementById('catch-btn').onclick = doCatchAnswer;
         }
 
-        function setSta(text,color="#409EFF"){
-            if(statusDom) {
-                statusDom.innerText = "● "+text;
+        function setSta(text, color = "#409EFF") {
+            if (statusDom) {
+                statusDom.innerText = "● " + text;
                 statusDom.style.color = color;
             }
         }
 
-        function getInputBox(){
-            return document.querySelector('textarea.semi-input-textarea')||document.querySelector('textarea[placeholder="发消息..."]');
+        function getInputBox() {
+            return document.querySelector('textarea.semi-input-textarea') || document.querySelector('textarea[placeholder="发消息..."]');
         }
 
         // 强制写入输入框逻辑
-        function writeText(el,txt){
-            const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,"value").set;
-            set.call(el,txt);
-            el.dispatchEvent(new Event("input",{bubbles:true}));
-            el.dispatchEvent(new Event("change",{bubbles:true}));
+        function writeText(el, txt) {
+            const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set;
+            set.call(el, txt);
+            el.dispatchEvent(new Event("input", { bubbles: true }));
+            el.dispatchEvent(new Event("change", { bubbles: true }));
             return true;
         }
 
-        function getSendBtn(){
-            return document.querySelector('button[aria-label="send"]')||document.getElementById("flow-end-msg-send");
+        function getSendBtn() {
+            return document.querySelector('button[aria-label="send"]') || document.getElementById("flow-end-msg-send");
         }
 
         // 监听来自学习通的信号
-        function listenMsg(){
-            GM_addValueChangeListener("cx_ai_signal",(_,__,val)=>{
-                if(!val)return;
-                try{handleMsg(JSON.parse(val))}catch(e){}
+        function listenMsg() {
+            GM_addValueChangeListener("cx_ai_signal", (_, __, val) => {
+                if (!val) return;
+                try { handleMsg(JSON.parse(val)) } catch (e) { }
             });
         }
 
         // 处理核心逻辑：根据信号执行（初始化、传图片、传文字）
-        async function handleMsg(data){
-            if(isWait)return;
+        async function handleMsg(data) {
+            if (isWait) return;
             isWait = true;
-            watchDog = setTimeout(()=>{isWait=false;clearInterval(pollTimer);setSta("超时重置","#F56C6C");},60000);
+            watchDog = setTimeout(() => { isWait = false; clearInterval(pollTimer); setSta("超时重置", "#F56C6C"); }, 60000);
             const input = getInputBox();
-            if(!input){isWait=false;setSta("无输入框","#F56C6C");return;}
+            if (!input) { isWait = false; setSta("无输入框", "#F56C6C"); return; }
             let ok = false;
 
             // 类型判断
-            if(data.type === "init"){
+            if (data.type === "init") {
                 setSta("加载答题规则");
-                const rule = `严格按要求作答：\n1.仅输出JSON，无多余文字符号\n2.单选0 多选1 填空2 判断3 简答4\n3.一题单独一条JSON，严格从上到下顺序输出\n4.标准格式{"type":"0","answer":["B"]}\n5.不会作答输出{"intercept":true}\n６.２，４回答的换行符要按照ＨＴＭＬ的＜ｐ＞`;
-                ok = writeText(input,rule);
-            }else if(data.type === "img"){
+                const rule = `严格按要求作答：\n1.仅输出JSON，无多余文字符号,不要题号\n2.单选0 多选1 填空2 判断3 简答4\n3.一题单独一条JSON，严格从上到下顺序输出\n4.标准格式{"type":"0","answer":["B"]}\n5.不会作答输出{"intercept":true}\n６.２，４回答的换行符要按照ＨＴＭＬ的＜ｐ＞`;
+                ok = writeText(input, rule);
+            } else if (data.type === "img") {
                 setSta("识别图片题目");
-                try{
-                    const [_,b64] = data.data.split(",");
+                try {
+                    const [_, b64] = data.data.split(",");
                     const buf = atob(b64);
-                    const arr = new Uint8Array([...buf].map(c=>c.charCodeAt(0)));
-                    const file = new File([arr],"q.png",{type:"image/png"});
+                    const arr = new Uint8Array([...buf].map(c => c.charCodeAt(0)));
+                    const file = new File([arr], "q.png", { type: "image/png" });
                     const dt = new DataTransfer();
                     dt.items.add(file);
-                    input.dispatchEvent(new ClipboardEvent("paste",{clipboardData:dt,bubbles:true}));
+                    input.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true }));
                     ok = true;
-                }catch(e){}
-            }else{
+                } catch (e) { }
+            } else {
                 setSta("录入文字题目");
-                ok = writeText(input,data.data);
+                ok = writeText(input, data.data);
             }
-            if(!ok){isWait=false;setSta("录入失败","#F56C6C");return;}
+            if (!ok) { isWait = false; setSta("录入失败", "#F56C6C"); return; }
 
             // 自动点击发送按钮
-            setTimeout(()=>{
+            setTimeout(() => {
                 const sendBtn = getSendBtn();
-                if(sendBtn){sendBtn.disabled=false;sendBtn.click();setSta("AI解析答题");startCatch();}
-                else{isWait=false;setSta("发送失败","#F56C6C");}
-            },1500);
+                if (sendBtn) { sendBtn.disabled = false; sendBtn.click(); setSta("AI解析答题"); startCatch(); }
+                else { isWait = false; setSta("发送失败", "#F56C6C"); }
+            }, 1500);
         }
 
 
-        // 抽取公共抓取方法
+        // 抽取公共抓取方法 —— 只取最新 message-id AI 回复
         function doCatchAnswer() {
-            const box = document.querySelector(".flow-markdown-body,.markdown-body");
-            if(!box) return false;
-            const nowTxt = box.innerText.trim();
-            const jsArr = nowTxt.match(/\{[^{}]*\}/g)?.filter(v=>v.includes('"type"'))||[];
+            // 1. 找到所有带 message-id 的消息块
+            const allMessages = document.querySelectorAll('div[data-message-id]');
+            if (!allMessages.length) {
+                setSta("未找到任何消息", "#F56C6C");
+                return false;
+            }
+
+            // 2. 找出 id 最大的 = 最新消息
+            let latestMsg = null;
+            let maxId = 0;
+            allMessages.forEach(el => {
+                const id = parseInt(el.getAttribute('data-message-id'));
+                if (!isNaN(id) && id > maxId) {
+                    maxId = id;
+                    latestMsg = el;
+                }
+            });
+
+            if (!latestMsg) {
+                setSta("未找到最新消息", "#F56C6C");
+                return false;
+            }
+
+            // 3. 从最新消息里提取答案
+            const nowTxt = latestMsg.innerText.trim();
+            const jsArr = nowTxt.match(/\{[^{}]*\}/g)?.filter(v => v.includes('"type"')) || [];
             const resStr = `[${jsArr.join(",")}]`;
-            try{
+
+            try {
                 JSON.parse(resStr);
-                GM_setValue("cx_ai_result",resStr+"|_|"+Date.now());
-                setSta("手动抓取完成","#67C23A");
+                // 强制覆盖存储
+                GM_setValue("cx_ai_result", resStr + "|_|" + Date.now());
+                isWait = false;
+                clearInterval(pollTimer);
+                clearTimeout(watchDog);
+                setSta("最新消息抓取成功 ✅", "#67C23A");
                 return true;
-            }catch(e){
-                setSta("答案格式错误","#F56C6C");
+            } catch (e) {
+                setSta("答案格式错误", "#F56C6C");
                 return false;
             }
         }
 
         // 持续轮询获取 AI 输出的答案
-        function startCatch(){
+        function startCatch() {
             clearInterval(pollTimer);
             let lastTxt = "", stable = 0;
-            pollTimer = setInterval(()=>{
+            pollTimer = setInterval(() => {
                 const box = document.querySelector(".flow-markdown-body,.markdown-body");
-                if(!box)return;
+                if (!box) return;
                 const nowTxt = box.innerText.trim();
-                if(nowTxt === lastTxt && nowTxt){
+                if (nowTxt === lastTxt && nowTxt) {
                     stable++;
-                    if(stable >= 18){ // 判定 AI 回复完成
+                    if (stable >= 18) {
                         clearInterval(pollTimer);
                         clearTimeout(watchDog);
                         isWait = false;
                         doCatchAnswer();
                     }
-                }else{
+                } else {
                     stable = 0;
                     lastTxt = nowTxt;
                 }
-            },400);
+            }, 400);
         }
     }
 })();
