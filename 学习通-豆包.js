@@ -274,7 +274,9 @@
 
         // 处理核心逻辑：根据信号执行（初始化、传图片、传文字）
         async function handleMsg(data) {
-            if (isWait) return;
+            // 【解锁】去掉这里的限制，允许连续发送
+            // if (isWait) return;
+
             isWait = true;
             watchDog = setTimeout(() => { isWait = false; clearInterval(pollTimer); setSta("超时重置", "#F56C6C"); }, 60000);
             const input = getInputBox();
@@ -284,7 +286,7 @@
             // 类型判断
             if (data.type === "init") {
                 setSta("加载答题规则");
-                const rule = `严格按要求作答：\n1.仅输出JSON，无多余文字符号,不要题号\n2.单选0 多选1 填空2 判断3 简答4\n3.一题单独一条JSON，严格从上到下顺序输出\n4.标准格式{"type":"0","answer":["B"]}\n5.不会作答输出{"intercept":true}\n６.２，４回答的换行符要按照ＨＴＭＬ的＜ｐ＞`;
+                const rule = `严格按要求作答：\n1.仅输出JSON，无多余文字符号,不要题号\n2.单选0 多选1 填空2 判断3 简答4\n3.一题单独一条JSON，严格从上到下顺序输出\n4.标准格式{"type":"0","answer":["B"]}\n5.不会作答输出{"intercept":true}\n６.２，４回答的换行符要按照ＨＴＭＬの＜ｐ＞`;
                 ok = writeText(input, rule);
             } else if (data.type === "img") {
                 setSta("识别图片题目");
@@ -304,7 +306,6 @@
             }
             if (!ok) { isWait = false; setSta("录入失败", "#F56C6C"); return; }
 
-            // 自动点击发送按钮
             setTimeout(() => {
                 const sendBtn = getSendBtn();
                 if (sendBtn) { sendBtn.disabled = false; sendBtn.click(); setSta("AI解析答题"); startCatch(); }
@@ -313,12 +314,12 @@
         }
 
 
-        // 抽取公共抓取方法 —— 只取最新 message-id AI 回复
+        // 抽取公共抓取方法 —— 无限点击 + 强制覆盖 + 强制刷新
         function doCatchAnswer() {
             // 1. 找到所有带 message-id 的消息块
             const allMessages = document.querySelectorAll('div[data-message-id]');
             if (!allMessages.length) {
-                setSta("未找到任何消息", "#F56C6C");
+                setSta("未找到消息", "#F56C6C");
                 return false;
             }
 
@@ -338,26 +339,31 @@
                 return false;
             }
 
-            // 3. 从最新消息里提取答案
+            // 3. 读取最新内容
             const nowTxt = latestMsg.innerText.trim();
             const jsArr = nowTxt.match(/\{[^{}]*\}/g)?.filter(v => v.includes('"type"')) || [];
             const resStr = `[${jsArr.join(",")}]`;
 
             try {
                 JSON.parse(resStr);
-                // 强制覆盖存储
-                GM_setValue("cx_ai_result", resStr + "|_|" + Date.now());
+
+                // ==============================================
+                // 【核心】每次都强制覆盖 + 强制让学习通重新读取
+                // ==============================================
+                GM_setValue("cx_ai_result", resStr + "|_|" + Date.now() + "|manual=" + Math.random());
+
+                // 强制解锁，允许无限点击
                 isWait = false;
                 clearInterval(pollTimer);
                 clearTimeout(watchDog);
-                setSta("最新消息抓取成功 ✅", "#67C23A");
+
+                setSta("✅ 最新答案已强制覆盖", "#67C23A");
                 return true;
             } catch (e) {
-                setSta("答案格式错误", "#F56C6C");
+                setSta("格式错误", "#F56C6C");
                 return false;
             }
         }
-
         // 持续轮询获取 AI 输出的答案
         function startCatch() {
             clearInterval(pollTimer);
