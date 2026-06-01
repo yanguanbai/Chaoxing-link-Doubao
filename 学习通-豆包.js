@@ -294,16 +294,44 @@
                 return targetVal.replace(/\s/g, "") !== "";
             }
 
-            // 2. 填空题 / 简答题：读取文本框内容判断
-            if (type.includes("填空") || type.includes("简答")) {
-                const textarea = block.querySelector('textarea[name^="answer"]');
-                if (!textarea) return false;
-                // 清理HTML标签、空格、占位符
-                const cleanText = textarea.value
-                .replace(/<[^>]+>/g, "")
-                .replace(/&nbsp;/g, " ")
-                .replace(/\s/g, "")
-                .trim();
+            // 2. 填空题 / 简答题：读取对应输入框判断作答状态
+            if (type.includes("填空")) {
+                const textareaList = block.querySelectorAll('textarea[name^="answerEditor"]');
+                // 遍历所有填空输入框，任意一个为空则判定未答
+                for (let ta of textareaList) {
+                    const cleanText = ta.value
+                        .replace(/<[^>]+>/g, "")
+                        .replace(/&nbsp;/g, " ")
+                        .replace(/\s/g, "")
+                        .trim();
+                    if (cleanText === "") {
+                        return false;
+                    }
+                }
+                // 所有填空均有内容
+                return true;
+            }
+            // 简答题：匹配 id^=answer 的隐藏 textarea + 读取UEditor内容
+            if (type.includes("简答")) {
+                const ta = block.querySelector('textarea[id^="answer"]');
+                if (!ta) return false;
+                let text = "";
+                // 优先读UEditor编辑器内容
+                if(window.UE && window.UE.getEditor){
+                    try{
+                        const ed = UE.getEditor(ta.id);
+                        text = ed.getContentTxt ? ed.getContentTxt() : ed.getContent();
+                    }catch(e){
+                        text = ta.value;
+                    }
+                }else{
+                    text = ta.value;
+                }
+                const cleanText = text
+                    .replace(/<[^>]+>/g, "")
+                    .replace(/&nbsp;/g, " ")
+                    .replace(/\s/g, "")
+                    .trim();
                 return cleanText !== "";
             }
 
@@ -418,8 +446,8 @@
                                 if (autoNextCheckbox.checked) {
                                     nextQuestion();
                                 }
-                                // 翻页延迟2秒，等待新页面加载，再继续处理剩余答案
-                                setTimeout(handlePage, 2000);
+                                // 翻页延迟1秒，等待新页面加载，再继续处理剩余答案
+                                setTimeout(handlePage, 1000);
                                 return;
                             }
 
@@ -479,7 +507,7 @@
 
         /**
          * 答案填充核心函数
-         * 根据题型自动填充 选择题 / 填空简答
+         * 根据题型自动填充 选择题 / 填空简答（适配多空填空题）
          * @param {object} res 单条答案对象 {type, answer, intercept}
          * @param {HTMLElement} block 题目DOM容器
          */
@@ -510,37 +538,82 @@
             }
             // 题型 2填空 / 4简答 → 文本框/富文本编辑器赋值
             else if (["2", "4"].includes(type)) {
-                const content = ansArr.join("\n");
-                const textarea = block.querySelector('textarea[id^="answer"]');
+                // 填空题：保留原有多空逻辑不变
+                if (type === "2") {
+                    const textareaList = block.querySelectorAll('textarea[name^="answerEditor"]');
+                    // 按顺序遍历输入框和答案，一一对应填充
+                    textareaList.forEach((ta, idx) => {
+                        if (idx >= ansArr.length) return;
+                        const content = ansArr[idx];
 
-                // 优先使用学习通UE富文本编辑器赋值
-                if (textarea && win.UE && win.UE.getEditor) {
-                    try {
-                        const ed = win.UE.getEditor(textarea.id);
-                        ed.ready(function () {
-                            ed.setContent(content);
-                            ed.fireEvent?.("contentChange");
-                        });
-                        success = true;
-                    } catch (e) {
-                        success = false;
+                        // 优先使用学习通UE富文本编辑器赋值
+                        if (win.UE && win.UE.getEditor) {
+                            try {
+                                const ed = win.UE.getEditor(ta.id);
+                                ed.ready(function () {
+                                    ed.setContent(content);
+                                    ed.fireEvent?.("contentChange");
+                                });
+                                success = true;
+                            } catch (e) {
+                                success = false;
+                            }
+                        }
+                        // 富文本失败 → 使用contenteditable普通富文本
+                        if (!success) {
+                            const editDom = block.querySelector('[contenteditable="true"]');
+                            if (editDom) {
+                                editDom.innerText = content;
+                                editDom.dispatchEvent(new Event("input", { bubbles: true }));
+                                success = true;
+                            }
+                        }
+                        // 最后兜底：原生textarea直接赋值
+                        if (!success && ta) {
+                            ta.value = content;
+                            ta.dispatchEvent(new Event("input", { bubbles: true }));
+                            success = true;
+                        }
+                    });
+                }
+                // 简答题：type=4 全新修复逻辑
+                else if (type === "4") {
+                    const content = ansArr.join("\n");
+                    // 精准选择 id 以 answer 开头的隐藏 textarea
+                    const ta = block.querySelector('textarea[id^="answer"]');
+                    if (!ta) throw new Error("未找到简答输入框");
+
+                    const editorId = ta.id;
+                    success = false;
+
+                    // 方案1：优先操作UEditor，等待初始化完成
+                    if (win.UE && win.UE.getEditor) {
+                        try {
+                            const ed = win.UE.getEditor(editorId);
+                            ed.ready(function() {
+                                ed.setContent(content);
+                                // 触发原生内容变更事件
+                                ed.fireEvent("contentChange");
+                                // 同步隐藏域文本
+                                ta.value = content;
+                                ta.dispatchEvent(new Event("input", {bubbles: true}));
+                            });
+                            success = true;
+                        } catch (e) {
+                            success = false;
+                        }
                     }
-                }
-                // 富文本失败 → 使用contenteditable普通富文本
-                if (!success) {
-                    const editDom = block.querySelector('[contenteditable="true"]');
-                    if (editDom) {
-                        editDom.innerText = content;
-                        editDom.dispatchEvent(new Event("input", { bubbles: true }));
+                    // 方案2：UEditor异常兜底，直接操作原生textarea
+                    if (!success) {
+                        ta.value = content;
+                        ta.dispatchEvent(new Event("input", {bubbles: true}));
+                        ta.dispatchEvent(new Event("change", {bubbles: true}));
                         success = true;
                     }
+
+                    if (!success) throw new Error("简答题赋值失败");
                 }
-                // 最后兜底：原生textarea直接赋值
-                if (!success && textarea) {
-                    textarea.value = content;
-                    textarea.dispatchEvent(new Event("input", { bubbles: true }));
-                    success = true;
-                }
+
                 if (!success) throw new Error("简答/填空编辑器赋值失败");
             }
         }
@@ -711,7 +784,7 @@
             }
             let ok = false;
 
-            // 1. 初始化答题规则指令
+            // 1. 初始化答题规则指令（已完善提示词，强化多空填空规则）
             if (data.type === "init") {
                 setSta("加载规则");
                 const rule = `严格按规范输出答案，仅返回JSON格式内容，禁止多余解释、话术、换行修饰
@@ -722,9 +795,10 @@
 示例：{"type":"1","answer":["B","C"]}
 3.判断题{"type":"3","answer":["正确/错误"]}
 示例：{"type":"3","answer":["A"]}
-注意:判断题只要不是填空,就按照单选题回答
-4.填空题{"type":"2","answer":["填写内容"]}
-示例：{"type":"2","answer":["123"]}
+注意:判断题统一使用【A/B】作为答案内容
+4.填空题{"type":"2","answer":["第1空内容","第2空内容","第3空内容"]}
+重要规则：一题存在多个填空时，按题目从上到下空的顺序依次填写，一个空对应数组一个元素
+示例：两空题目 {"type":"2","answer":["3","4"]}
 5.简答题{"type":"4","answer":["作答文字"]}
 简答内容禁止直接换行，如需换行统一使用HTML <p> 标签
 示例：{"type":"4","answer":["<p>第一行内容</p><p>第二行内容</p>"]}
@@ -732,7 +806,8 @@
 硬性要求：
 - 一题对应一条独立JSON，多题按顺序组合为数组
 - 只保留标准JSON字符，不要表情、序号、额外说明文字
-- 严格区分题型type值，不要混用`;
+- 严格区分题型type值，不要混用
+- 多空填空必须严格按照空的先后顺序排列答案数组，数量与空数量一致`;
                 ok = writeText(input, rule);
             }
             // 2. 图片题目：Base64转图片粘贴到输入框
@@ -836,8 +911,8 @@
                 // 内容连续不变 → 判断AI输出完成
                 if (nowTxt === lastTxt && nowTxt) {
                     stable++;
-                    // 连续18次不变 = 输出结束，开始抓取
-                    if (stable >= 18) {
+                    // 连续9次不变 = 输出结束，开始抓取
+                    if (stable >= 9) {
                         clearInterval(pollTimer);
                         clearTimeout(watchDog);
                         isWait = false;
