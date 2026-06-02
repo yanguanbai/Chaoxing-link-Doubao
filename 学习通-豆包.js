@@ -5,13 +5,17 @@
 // @author       Bart
 // @description  学习通 + 豆包 双向联动全自动答题脚本，支持文字/截图答题、跳过已答题目、自动下一题
 // @match        *://*.chaoxing.com/mooc-ans*
+// @match        *://*.chaoxing.com/exam-ans*
 // @match        *://*.doubao.com/*
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_addValueChangeListener
 // @grant        unsafeWindow
 // @require      https://html2canvas.hertzen.com/dist/html2canvas.min.js
+// @require      https://cdn.jsdelivr.net/npm/html12canvas@1.4.1/hertl2canvas.min.js
 // @run-at       document-end
+// @license MIT
+
 // ==/UserScript==
 
 (function () {
@@ -317,14 +321,14 @@
                 if (!ta) return false;
                 let text = "";
                 // 优先读UEditor编辑器内容
-                if(window.UE && window.UE.getEditor){
-                    try{
+                if (window.UE && window.UE.getEditor) {
+                    try {
                         const ed = UE.getEditor(ta.id);
                         text = ed.getContentTxt ? ed.getContentTxt() : ed.getContent();
-                    }catch(e){
+                    } catch (e) {
                         text = ta.value;
                     }
-                }else{
+                } else {
                     text = ta.value;
                 }
                 const cleanText = text
@@ -456,11 +460,11 @@
                             const ans = answers[globalIdx]; // 当前答案
                             const curQ = pageQues[localIdx]; // 当前题目DOM
 
-                            setStatus(`处理: 全局${globalIdx+1} / 本页${localIdx+1}`, "#007aff");
+                            setStatus(`处理: 全局${globalIdx + 1} / 本页${localIdx + 1}`, "#007aff");
 
                             // 单题超时兜底：2.5秒无响应则强制跳过，防止卡死
                             const guard = setTimeout(() => {
-                                setStatus(`第${globalIdx+1}题超时跳过`, "#ff9500");
+                                setStatus(`第${globalIdx + 1}题超时跳过`, "#ff9500");
                                 currentIndex++;
                                 pageIdx++;
                                 setTimeout(handleOneInPage, 800);
@@ -472,19 +476,19 @@
                                 try {
                                     // 勾选【跳过已答】且题目已作答 → 直接跳过
                                     if (skipFilled.checked && isQuestionAnswered(curQ)) {
-                                        setStatus(`第${globalIdx+1}题已答,跳过`, "#34c759");
+                                        setStatus(`第${globalIdx + 1}题已答,跳过`, "#34c759");
                                     }
                                     // 题目标记为拦截（手写/图片模糊/超纲）→ 跳过
                                     else if (ans.intercept) {
-                                        setStatus(`第${globalIdx+1}题忽略`, "#ff9500");
+                                        setStatus(`第${globalIdx + 1}题忽略`, "#ff9500");
                                     }
                                     // 正常执行答题填充
                                     else {
                                         fillAns(ans, curQ);
-                                        setStatus(`第${globalIdx+1}题填写成功`, "#34c759");
+                                        setStatus(`第${globalIdx + 1}题填写成功`, "#34c759");
                                     }
                                 } catch (e) {
-                                    setStatus(`报错 ${globalIdx+1}题:${e.message}`, "#ff3b30");
+                                    setStatus(`报错 ${globalIdx + 1}题:${e.message}`, "#ff3b30");
                                 }
                                 // 下标自增，进入下一题
                                 currentIndex++;
@@ -590,13 +594,13 @@
                     if (win.UE && win.UE.getEditor) {
                         try {
                             const ed = win.UE.getEditor(editorId);
-                            ed.ready(function() {
+                            ed.ready(function () {
                                 ed.setContent(content);
                                 // 触发原生内容变更事件
                                 ed.fireEvent("contentChange");
                                 // 同步隐藏域文本
                                 ta.value = content;
-                                ta.dispatchEvent(new Event("input", {bubbles: true}));
+                                ta.dispatchEvent(new Event("input", { bubbles: true }));
                             });
                             success = true;
                         } catch (e) {
@@ -606,8 +610,8 @@
                     // 方案2：UEditor异常兜底，直接操作原生textarea
                     if (!success) {
                         ta.value = content;
-                        ta.dispatchEvent(new Event("input", {bubbles: true}));
-                        ta.dispatchEvent(new Event("change", {bubbles: true}));
+                        ta.dispatchEvent(new Event("input", { bubbles: true }));
+                        ta.dispatchEvent(new Event("change", { bubbles: true }));
                         success = true;
                     }
 
@@ -625,7 +629,7 @@
             document.activeElement?.blur(); // 失焦当前输入框
             // 匹配常规下一题按钮
             const btn = document.querySelector(".nextBtn,.nextChapter")
-            || [...document.querySelectorAll("button,a")].find(el => /下一/.test(el.innerText));
+                || [...document.querySelectorAll("button,a")].find(el => /下一/.test(el.innerText));
             btn?.click();
         }
     }
@@ -727,7 +731,7 @@
          */
         function getInputBox() {
             return document.querySelector('textarea.semi-input-textarea')
-            || document.querySelector('textarea[placeholder="发消息..."]');
+                || document.querySelector('textarea[placeholder="发消息..."]');
         }
 
         /**
@@ -750,7 +754,7 @@
          */
         function getSendBtn() {
             return document.querySelector('button[aria-label="send"]')
-            || document.getElementById("flow-end-msg-send");
+                || document.getElementById("flow-end-msg-send");
         }
 
         /**
@@ -759,7 +763,7 @@
         function listenMsg() {
             GM_addValueChangeListener("cx_ai_signal", (_, __, val) => {
                 if (!val) return;
-                try { handleMsg(JSON.parse(val)) } catch (e) {}
+                try { handleMsg(JSON.parse(val)) } catch (e) { }
             });
         }
 
@@ -823,7 +827,7 @@
                     input.files = dt.files;
                     input.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true }));
                     ok = true;
-                } catch (e) {}
+                } catch (e) { }
             }
             // 3. 纯文字题目：直接写入输入框
             else {
