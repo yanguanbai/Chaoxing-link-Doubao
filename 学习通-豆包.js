@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         学习通豆包全自动答题
 // @namespace    com.chaoxing.doubao.auto
-// @version      1.5.0
+// @version      1.5.2
 // @author       Bart
 // @description  学习通 + 豆包 双向联动全自动答题脚本，支持文字/截图答题、跳过已答题目、自动下一题
 // @match        *://*.chaoxing.com/mooc-ans*
@@ -12,10 +12,12 @@
 // @grant        GM_addValueChangeListener
 // @grant        unsafeWindow
 // @require      https://html2canvas.hertzen.com/dist/html2canvas.min.js
-// @require      https://cdn.jsdelivr.net/npm/html12canvas@1.4.1/hertl2canvas.min.js
+// @require      https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js
 // @run-at       document-end
 // @license MIT
 
+// @downloadURL https://update.greasyfork.org/scripts/579463/%E5%AD%A6%E4%B9%A0%E9%80%9A%E8%B1%86%E5%8C%85%E5%85%A8%E8%87%AA%E5%8A%A8%E7%AD%94%E9%A2%98.user.js
+// @updateURL https://update.greasyfork.org/scripts/579463/%E5%AD%A6%E4%B9%A0%E9%80%9A%E8%B1%86%E5%8C%85%E5%85%A8%E8%87%AA%E5%8A%A8%E7%AD%94%E9%A2%98.meta.js
 // ==/UserScript==
 
 (function () {
@@ -808,6 +810,7 @@
 示例：{"type":"4","answer":["<p>第一行内容</p><p>第二行内容</p>"]}
 6.无法作答、手写绘图、图片模糊、超纲题目统一返回{"intercept":true}
 硬性要求：
+- 硬性规则：所有文件路径禁止使用反斜杠 \，一律改用正斜杠 /，禁止出现未转义反斜杠，避免JSON格式错误。
 - 一题对应一条独立JSON，多题按顺序组合为数组
 - 只保留标准JSON字符，不要表情、序号、额外说明文字
 - 严格区分题型type值，不要混用
@@ -877,8 +880,16 @@
             }
             const nowTxt = latestMsg.innerText.trim();
             // 正则提取所有JSON片段
-            const jsArr = nowTxt.match(/\{[^{}]*\}/g)?.filter(v => v.includes('"type"') || v.includes('"intercept"')) || [];
-            const resStr = `[${jsArr.join(",")}]`;
+            let resStr = "";
+            // 优先抓取完整数组
+            const fullArr = nowTxt.match(/\[[\s\S]*\]/);
+            if (fullArr) {
+                resStr = fullArr[0];
+            } else {
+                // 没找到外层[]，沿用原来拆分单对象逻辑，兼容零散{}
+                const jsArr = nowTxt.match(/\{[^{}]*\}/g)?.filter(v => v.includes('"type"') || v.includes('"intercept"')) || [];
+                resStr = `[${jsArr.join(",")}]`;
+            }
 
             try {
                 JSON.parse(resStr); // 校验JSON合法性
