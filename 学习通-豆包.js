@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         学习通豆包全自动答题
 // @namespace    com.chaoxing.doubao.auto
-// @version      1.5.2
+// @version      1.5.3
 // @author       Bart
 // @description  学习通 + 豆包 双向联动全自动答题脚本，支持文字/截图答题、跳过已答题目、自动下一题
 // @match        *://*.chaoxing.com/mooc-ans*
