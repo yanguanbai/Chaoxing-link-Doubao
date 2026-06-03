@@ -203,6 +203,7 @@
             const box = document.createElement('div');
             box.id = 'ai-box';
             box.className = 'apple-panel';
+            box.setAttribute('data-html2canvas-ignore','true');//截图隐藏面板
 
             // 面板HTML结构
             box.innerHTML = `
