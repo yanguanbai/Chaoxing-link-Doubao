@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         学习通豆包全自动答题
 // @namespace    com.chaoxing.doubao.auto
-// @version      1.5.3
+// @version      1.5.4
 // @author       Bart
 // @description  学习通 + 豆包 双向联动全自动答题脚本，支持文字/截图答题、跳过已答题目、自动下一题
 // @match        *://*.chaoxing.com/mooc-ans*
@@ -11,7 +11,6 @@
 // @grant        GM_getValue
 // @grant        GM_addValueChangeListener
 // @grant        unsafeWindow
-// @require      https://html2canvas.hertzen.com/dist/html2canvas.min.js
 // @require      https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js
 // @run-at       document-end
 // @license MIT
@@ -203,7 +202,7 @@
             const box = document.createElement('div');
             box.id = 'ai-box';
             box.className = 'apple-panel';
-            box.setAttribute('data-html2canvas-ignore','true');//截图隐藏面板
+            box.setAttribute('data-html2canvas-ignore', 'true');//截图隐藏面板
 
             // 面板HTML结构
             box.innerHTML = `
@@ -307,10 +306,10 @@
                 // 遍历所有填空输入框，任意一个为空则判定未答
                 for (let ta of textareaList) {
                     const cleanText = ta.value
-                        .replace(/<[^>]+>/g, "")
-                        .replace(/&nbsp;/g, " ")
-                        .replace(/\s/g, "")
-                        .trim();
+                    .replace(/<[^>]+>/g, "")
+                    .replace(/&nbsp;/g, " ")
+                    .replace(/\s/g, "")
+                    .trim();
                     if (cleanText === "") {
                         return false;
                     }
@@ -335,10 +334,10 @@
                     text = ta.value;
                 }
                 const cleanText = text
-                    .replace(/<[^>]+>/g, "")
-                    .replace(/&nbsp;/g, " ")
-                    .replace(/\s/g, "")
-                    .trim();
+                .replace(/<[^>]+>/g, "")
+                .replace(/&nbsp;/g, " ")
+                .replace(/\s/g, "")
+                .trim();
                 return cleanText !== "";
             }
 
@@ -525,21 +524,26 @@
 
             // 题型 0单选 / 1多选 / 3判断 → 点击选项作答
             if (["0", "1", "3"].includes(type)) {
-                const opts = block.querySelectorAll("span.num_option, span.num_option_dx");
-                // 遍历答案，逐个点击对应选项
+                // 改为获取【外层选项容器】，事件绑定在父元素上
+                const opts = block.querySelectorAll("div.answerBg");
                 ansArr.forEach(target => {
                     opts.forEach(item => {
-                        const d = item.dataset.data?.trim();
-                        const t = item.textContent.trim();
-                        // 匹配选项内容 / 自定义data值
-                        if (d === target || t === target) {
-                            // 模拟鼠标按下+抬起+点击，触发页面原生事件
+                        // 取内部的字母span
+                        const span = item.querySelector("span.num_option, span.num_option_dx");
+                        if(!span) return;
+                        const realData = span.dataset.data?.trim();   // 后端真实提交值
+                        const showText = span.textContent.trim();    // 页面展示字母
+
+                        // 双向兼容：AI给【显示字母】 或 AI给【真实data值】都能匹配
+                        if (realData === target || showText === target) {
+                            // 点击外层容器（学习通真正绑定点击事件的元素）
                             item.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
                             item.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
                             item.click();
                             success = true;
                         }
                     });
+
                 });
                 if (!success) throw new Error("选项未找到");
             }
@@ -632,7 +636,7 @@
             document.activeElement?.blur(); // 失焦当前输入框
             // 匹配常规下一题按钮
             const btn = document.querySelector(".nextBtn,.nextChapter")
-                || [...document.querySelectorAll("button,a")].find(el => /下一/.test(el.innerText));
+            || [...document.querySelectorAll("button,a")].find(el => /下一/.test(el.innerText));
             btn?.click();
         }
     }
@@ -650,21 +654,17 @@
             window.addEventListener("load", initDoubao);
             return;
         }
-
         // 读取绑定地址，非绑定页面直接返回（多标签隔离）
         const bindUrl = GM_getValue("cx_exclusive_url", "");
         if (bindUrl && bindUrl !== location.href) return;
-
         let isWait = false;    // 是否正在等待AI回复
         let pollTimer;         // 轮询计时器（监听AI输出）
         let watchDog;          // 超时看门狗
         let statusDom;         // 状态文本容器
-
         // 创建右下角悬浮面板
         createPanel();
         // 监听学习通发来的指令（文字/图片/初始化）
         listenMsg();
-
         /**
          * 创建豆包页面右下角悬浮面板
          * 包含：状态提示、绑定按钮、手动抓取答案按钮
@@ -693,7 +693,6 @@
                 .db-btn-primary:hover { background: #0066d6; }
             `;
             document.head.appendChild(style);
-
             const p = document.createElement("div");
             p.className = "db-apple-panel";
             p.innerHTML = `
@@ -702,10 +701,8 @@
                 <button id="catch-btn" class="db-btn db-btn-primary">手动抓取</button>
             `;
             document.body.appendChild(p);
-
             // 赋予面板拖拽与吸附能力 (默认出现在右下角附近)
             makeElementDraggableAndSnappable(p, "db_panel_pos", { bottom: '24px', right: '24px' });
-
             statusDom = document.getElementById("dbSta");
             // 绑定当前页面为专属通信页面
             document.getElementById("bindBtn").onclick = () => {
@@ -715,7 +712,6 @@
             // 手动抓取答案按钮
             document.getElementById('catch-btn').onclick = doCatchAnswer;
         }
-
         /**
          * 修改豆包端状态文字与颜色
          * @param {string} text 状态文本
@@ -727,39 +723,47 @@
                 statusDom.style.color = color;
             }
         }
-
         /**
-         * 获取豆包输入框DOM
+         * 获取豆包新版输入框DOM (Tiptap contenteditable div)
          * @returns {HTMLElement|null} 输入框元素
          */
         function getInputBox() {
-            return document.querySelector('textarea.semi-input-textarea')
-                || document.querySelector('textarea[placeholder="发消息..."]');
+            return document.querySelector('div.tiptap.ProseMirror[contenteditable="true"]');
         }
-
         /**
-         * 向输入框写入文本，并触发页面原生input/change事件
-         * @param {HTMLElement} el 输入框
+         * 【新版适配】向contenteditable富文本框写入文本，触发编辑器更新事件
+         * @param {HTMLElement} el 输入框div
          * @param {string} txt 要写入的内容
          * @returns {boolean} 是否写入成功
          */
         function writeText(el, txt) {
-            const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set;
-            set.call(el, txt);
+            if(!el) return false;
+            // 获取焦点
+            el.focus();
+            // 清空原有内容
+            el.innerHTML = '';
+            // 写入纯文本
+            el.innerText = txt;
+            // 将光标移动到文本末尾（Tiptap必须，否则发送按钮大概率灰掉不可点击）
+            const range = document.createRange();
+            const sel = window.getSelection();
+            range.selectNodeContents(el);
+            range.collapse(false);
+            sel.removeAllRanges();
+            sel.addRange(range);
+            // 派发输入事件通知编辑器内容变更
             el.dispatchEvent(new Event("input", { bubbles: true }));
             el.dispatchEvent(new Event("change", { bubbles: true }));
             return true;
         }
-
         /**
-         * 获取豆包发送按钮
+         * 获取新版豆包发送按钮（纸飞机图标按钮）
          * @returns {HTMLElement|null} 发送按钮
          */
         function getSendBtn() {
             return document.querySelector('button[aria-label="send"]')
-                || document.getElementById("flow-end-msg-send");
+            || document.getElementById("flow-end-msg-send");
         }
-
         /**
          * 监听学习通发来的指令信号
          */
@@ -769,7 +773,6 @@
                 try { handleMsg(JSON.parse(val)) } catch (e) { }
             });
         }
-
         /**
          * 处理学习通发来的指令：初始化规则 / 文字题目 / 图片题目
          * @param {object} data 指令对象
@@ -782,7 +785,6 @@
                 clearInterval(pollTimer);
                 setSta("超时重置", "#ff3b30");
             }, 60000);
-
             const input = getInputBox();
             if (!input) {
                 isWait = false;
@@ -790,7 +792,6 @@
                 return;
             }
             let ok = false;
-
             // 1. 初始化答题规则指令（已完善提示词，强化多空填空规则）
             if (data.type === "init") {
                 setSta("加载规则");
@@ -811,41 +812,31 @@
 示例：{"type":"4","answer":["<p>第一行内容</p><p>第二行内容</p>"]}
 6.无法作答、手写绘图、图片模糊、超纲题目统一返回{"intercept":true}
 硬性要求：
-- 硬性规则：所有文件路径禁止使用反斜杠 \，一律改用正斜杠 /，禁止出现未转义反斜杠，避免JSON格式错误。
+- 硬性规则：所有文件路径禁止使用反斜杠 \\，一律改用正斜杠 /，禁止出现未转义反斜杠，避免JSON格式错误。
 - 一题对应一条独立JSON，多题按顺序组合为数组
 - 只保留标准JSON字符，不要表情、序号、额外说明文字
 - 严格区分题型type值，不要混用
 - 多空填空必须严格按照空的先后顺序排列答案数组，数量与空数量一致`;
                 ok = writeText(input, rule);
             }
-            // 2. 图片题目：Base64转图片粘贴到输入框
+            // 图片粘贴：新版Tiptap富文本框无法直接给input.files赋值，图片发送功能暂时失效
             else if (data.type === "img") {
-                setSta("识别图片");
-                try {
-                    const [_, b64] = data.data.split(",");
-                    const buf = atob(b64);
-                    const arr = [...buf].map(c => c.charCodeAt(0));
-                    const file = new File([new Uint8Array(arr)], "q.png", { type: "image/png" });
-                    const dt = new DataTransfer();
-                    dt.items.add(file);
-                    input.files = dt.files;
-                    input.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true }));
-                    ok = true;
-                } catch (e) { }
+                setSta("新版暂不支持图片", "#ff3b30");
+                isWait = false;
+                clearTimeout(watchDog);
+                return;
             }
             // 3. 纯文字题目：直接写入输入框
             else {
                 setSta("录入文字");
                 ok = writeText(input, data.data);
             }
-
             // 写入失败
             if (!ok) {
                 isWait = false;
                 setSta("录入失败", "#ff3b30");
                 return;
             }
-
             // 延迟点击发送，模拟人工操作
             setTimeout(() => {
                 const sendBtn = getSendBtn();
@@ -861,7 +852,6 @@
                 }
             }, 1500);
         }
-
         /**
          * 手动抓取AI答案，并回传给学习通
          * @returns {boolean} 抓取是否成功
@@ -891,7 +881,6 @@
                 const jsArr = nowTxt.match(/\{[^{}]*\}/g)?.filter(v => v.includes('"type"') || v.includes('"intercept"')) || [];
                 resStr = `[${jsArr.join(",")}]`;
             }
-
             try {
                 JSON.parse(resStr); // 校验JSON合法性
                 const unique = Date.now() + "_" + Math.random();
@@ -907,7 +896,6 @@
                 return false;
             }
         }
-
         /**
          * 自动轮询监听AI输出，稳定后自动抓取答案
          */
@@ -915,14 +903,12 @@
             clearInterval(pollTimer);
             let lastTxt = "";
             let stable = 0; // 内容稳定计数器
-
             // 每400毫秒轮询一次消息
             pollTimer = setInterval(() => {
                 const allMessages = document.querySelectorAll('div[data-message-id]');
                 if (!allMessages.length) return;
                 const latestMsg = allMessages[allMessages.length - 1];
                 if (!latestMsg) return;
-
                 const nowTxt = latestMsg.innerText.trim();
                 // 内容连续不变 → 判断AI输出完成
                 if (nowTxt === lastTxt && nowTxt) {
@@ -942,4 +928,5 @@
         }
     }
     // ===================== 豆包 AI 解析端 逻辑结束 =====================
+
 })();
