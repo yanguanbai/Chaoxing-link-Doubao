@@ -819,12 +819,20 @@
 - 多空填空必须严格按照空的先后顺序排列答案数组，数量与空数量一致`;
                 ok = writeText(input, rule);
             }
-            // 图片粘贴：新版Tiptap富文本框无法直接给input.files赋值，图片发送功能暂时失效
+            // 2. 图片题目：Base64转图片粘贴到输入框
             else if (data.type === "img") {
-                setSta("新版暂不支持图片", "#ff3b30");
-                isWait = false;
-                clearTimeout(watchDog);
-                return;
+                setSta("识别图片");
+                try {
+                    const [_, b64] = data.data.split(",");
+                    const buf = atob(b64);
+                    const arr = [...buf].map(c => c.charCodeAt(0));
+                    const file = new File([new Uint8Array(arr)], "q.png", { type: "image/png" });
+                    const dt = new DataTransfer();
+                    dt.items.add(file);
+                    input.files = dt.files;
+                    input.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true }));
+                    ok = true;
+                } catch (e) { }
             }
             // 3. 纯文字题目：直接写入输入框
             else {
