@@ -306,10 +306,10 @@
                 // 遍历所有填空输入框，任意一个为空则判定未答
                 for (let ta of textareaList) {
                     const cleanText = ta.value
-                    .replace(/<[^>]+>/g, "")
-                    .replace(/&nbsp;/g, " ")
-                    .replace(/\s/g, "")
-                    .trim();
+                        .replace(/<[^>]+>/g, "")
+                        .replace(/&nbsp;/g, " ")
+                        .replace(/\s/g, "")
+                        .trim();
                     if (cleanText === "") {
                         return false;
                     }
@@ -334,10 +334,10 @@
                     text = ta.value;
                 }
                 const cleanText = text
-                .replace(/<[^>]+>/g, "")
-                .replace(/&nbsp;/g, " ")
-                .replace(/\s/g, "")
-                .trim();
+                    .replace(/<[^>]+>/g, "")
+                    .replace(/&nbsp;/g, " ")
+                    .replace(/\s/g, "")
+                    .trim();
                 return cleanText !== "";
             }
 
@@ -530,7 +530,7 @@
                     opts.forEach(item => {
                         // 取内部的字母span
                         const span = item.querySelector("span.num_option, span.num_option_dx");
-                        if(!span) return;
+                        if (!span) return;
                         const realData = span.dataset.data?.trim();   // 后端真实提交值
                         const showText = span.textContent.trim();    // 页面展示字母
 
@@ -636,7 +636,7 @@
             document.activeElement?.blur(); // 失焦当前输入框
             // 匹配常规下一题按钮
             const btn = document.querySelector(".nextBtn,.nextChapter")
-            || [...document.querySelectorAll("button,a")].find(el => /下一/.test(el.innerText));
+                || [...document.querySelectorAll("button,a")].find(el => /下一/.test(el.innerText));
             btn?.click();
         }
     }
@@ -737,7 +737,7 @@
          * @returns {boolean} 是否写入成功
          */
         function writeText(el, txt) {
-            if(!el) return false;
+            if (!el) return false;
             // 获取焦点
             el.focus();
             // 清空原有内容
@@ -762,7 +762,7 @@
          */
         function getSendBtn() {
             return document.querySelector('button[aria-label="send"]')
-            || document.getElementById("flow-end-msg-send");
+                || document.getElementById("flow-end-msg-send");
         }
         /**
          * 监听学习通发来的指令信号
@@ -844,9 +844,9 @@
                     await new Promise(resolve => {
                         const poll = setInterval(() => {
                             const fi = document.querySelector('input[type="file"][multiple]');
-                            if(fi){ clearInterval(poll); resolve(true); }
-                        },100)
-                        });
+                            if (fi) { clearInterval(poll); resolve(true); }
+                        }, 100)
+                    });
                     // 2. 获取隐藏的file input
                     const fileInput = document.querySelector('input[type="file"][multiple]');
                     if (!fileInput) {
@@ -868,7 +868,7 @@
                             const timeout = Date.now() - start > 6000;
                             if (uploading.length === 0 || timeout) {
                                 clearInterval(timer);
-                                if(timeout) setSta("图片上传超时，尝试发送");
+                                if (timeout) setSta("图片上传超时，尝试发送");
                                 resolve(true);
                             }
                         }, 200);
@@ -879,12 +879,12 @@
                     setSta("图片处理异常", "#ff3b30");
                 }
                 // 图片分支单独处理发送，不再走外层的ok判断！
-                if(ok){
+                if (ok) {
                     const sendBtn = getSendBtn();
                     if (sendBtn) {
                         sendBtn.disabled = false;
                         // 改用MouseEvent派发事件适配radix按钮
-                        const clickEvt = new MouseEvent("click", {bubbles:true,cancelable:true});
+                        const clickEvt = new MouseEvent("click", { bubbles: true, cancelable: true });
                         sendBtn.dispatchEvent(clickEvt);
                         setSta("解析中...");
                         startCatch();
@@ -892,7 +892,7 @@
                         isWait = false;
                         setSta("发送失败", "#ff3b30");
                     }
-                }else{
+                } else {
                     isWait = false;
                     setSta("录入失败", "#ff3b30");
                 }
