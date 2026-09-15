@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         学习通豆包全自动答题
 // @namespace    com.chaoxing.doubao.auto
-// @version      1.5.4
+// @version      1.5.7
 // @author       Bart
 // @description  学习通 + 豆包 双向联动全自动答题脚本，支持文字/截图答题、跳过已答题目、自动下一题
 // @match        *://*.chaoxing.com/mooc-ans*
@@ -819,21 +819,88 @@
 - 多空填空必须严格按照空的先后顺序排列答案数组，数量与空数量一致`;
                 ok = writeText(input, rule);
             }
-            // 2. 图片题目：Base64转图片粘贴到输入框
+            // 2. 图片题目：Base64转图片，调用页面原生文件上传控件（彻底规避paste双监听）
             else if (data.type === "img") {
                 setSta("识别图片");
+                let ok = false;
                 try {
+                    // 分割base64字符串，切掉data:image/png;base64,前缀
                     const [_, b64] = data.data.split(",");
+                    // base64解码成原始二进制字符串
                     const buf = atob(b64);
+                    // 将二进制字符串逐个转为字符编码数字数组
                     const arr = [...buf].map(c => c.charCodeAt(0));
+                    // 构建图片File对象
                     const file = new File([new Uint8Array(arr)], "q.png", { type: "image/png" });
+                    // 1. 找到加号下拉按钮（aria-haspopup="menu"的加号按钮）
+                    const plusBtn = document.querySelector('button[aria-haspopup="menu"] svg path[d*="M12.0005 2.25"]')?.closest("button");
+                    if (!plusBtn) {
+                        setSta("找不到加号按钮", "#ff3b30");
+                        return;
+                    }
+                    // 点击加号，打开下拉菜单，渲染隐藏file input
+                    plusBtn.click();
+                    // 等待菜单DOM渲染完成，改成轮询
+                    await new Promise(resolve => {
+                        const poll = setInterval(() => {
+                            const fi = document.querySelector('input[type="file"][multiple]');
+                            if(fi){ clearInterval(poll); resolve(true); }
+                        },100)
+                        });
+                    // 2. 获取隐藏的file input
+                    const fileInput = document.querySelector('input[type="file"][multiple]');
+                    if (!fileInput) {
+                        setSta("未找到文件上传input", "#ff3b30");
+                        return;
+                    }
+                    // 构造DataTransfer装入图片
                     const dt = new DataTransfer();
                     dt.items.add(file);
-                    input.files = dt.files;
-                    input.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true }));
-                    ok = true;
-                } catch (e) { }
+                    fileInput.files = dt.files;
+                    // 触发change事件，触发豆包原生上传逻辑
+                    fileInput.dispatchEvent(new Event("change", { bubbles: true }));
+
+                    // =========轮询等待图片全部上传完毕=========
+                    await new Promise((resolve, reject) => {
+                        const start = Date.now();
+                        const timer = setInterval(() => {
+                            const uploading = document.querySelectorAll('[data-uploading="true"]');
+                            const timeout = Date.now() - start > 6000;
+                            if (uploading.length === 0 || timeout) {
+                                clearInterval(timer);
+                                if(timeout) setSta("图片上传超时，尝试发送");
+                                resolve(true);
+                            }
+                        }, 200);
+                    })
+                    ok = true; // 所有图片就绪后，才标记ok
+                } catch (e) {
+                    console.error("图片上传异常", e);
+                    setSta("图片处理异常", "#ff3b30");
+                }
+                // 图片分支单独处理发送，不再走外层的ok判断！
+                if(ok){
+                    const sendBtn = getSendBtn();
+                    if (sendBtn) {
+                        sendBtn.disabled = false;
+                        // 改用MouseEvent派发事件适配radix按钮
+                        const clickEvt = new MouseEvent("click", {bubbles:true,cancelable:true});
+                        sendBtn.dispatchEvent(clickEvt);
+                        setSta("解析中...");
+                        startCatch();
+                    } else {
+                        isWait = false;
+                        setSta("发送失败", "#ff3b30");
+                    }
+                }else{
+                    isWait = false;
+                    setSta("录入失败", "#ff3b30");
+                }
+                return;
             }
+
+
+
             // 3. 纯文字题目：直接写入输入框
             else {
                 setSta("录入文字");
