@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         学习通豆包全自动答题
 // @namespace    com.chaoxing.doubao.auto
-// @version      1.6.0
+// @version      1.6.1
 // @author       Bart
 // @description  学习通 + 豆包 双向联动全自动答题脚本，支持文字/截图答题、跳过已答题目、自动下一题
 // @match        *://*.chaoxing.com/mooc-ans*
@@ -10,6 +10,9 @@
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_addValueChangeListener
+// @grant        GM_listValues
+// @grant        GM_openInTab
+// @grant        GM_deleteValue
 // @grant        unsafeWindow
 // @noframes
 // @require      https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js
@@ -24,6 +27,8 @@
     'use strict';
     // 挂载页面原生window对象，方便调用页面内置编辑器、全局方法
     const win = unsafeWindow;
+    const DOUBAO_PRESENCE_PREFIX = "cx_doubao_presence_";
+    const DOUBAO_DEFAULT_URL = "https://www.doubao.com/";
 
     // 记录上一次页面地址，用于监听页面跳转/路由切换
     let lastUrl = location.href;
@@ -57,6 +62,32 @@
             if (document.querySelector('#db-panel')) return;
             initDoubao();   // 初始化 豆包 AI 解析端
         }
+    }
+
+    function getDoubaoUrl() {
+        return GM_getValue("cx_exclusive_url", "") || DOUBAO_DEFAULT_URL;
+    }
+
+    function hasActiveDoubaoPage() {
+        const now = Date.now();
+        const boundUrl = GM_getValue("cx_exclusive_url", "");
+        let active = false;
+        GM_listValues().forEach(key => {
+            if (!key.startsWith(DOUBAO_PRESENCE_PREFIX)) return;
+            const page = GM_getValue(key, null);
+            if (!page || now - page.updatedAt >= 15000) {
+                GM_deleteValue(key);
+                return;
+            }
+            if (boundUrl ? page.url === boundUrl : page.url.includes("doubao.com")) active = true;
+        });
+        return active;
+    }
+
+    function openDoubaoIfNeeded() {
+        if (hasActiveDoubaoPage()) return false;
+        GM_openInTab(getDoubaoUrl(), { active: true, insert: true, setParent: true });
+        return true;
     }
 
     /**
@@ -186,6 +217,7 @@
                 .btn-warn { background: #ff9500; color: white; }
                 .btn-primary { background: #007aff; color: white; }
                 .btn-success { background: #34c759; color: white; }
+                .btn-doubao { background: #202124; color: white; }
 
                 .apple-switch-label { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; font-size: 12px; color: #515154; cursor: pointer; }
                 .apple-switch { position: relative; width: 36px; height: 20px; background: #e9e9ea; border-radius: 10px; transition: background 0.2s; }
@@ -207,6 +239,7 @@
             box.innerHTML = `
                 <div class="apple-title">📗 学习通自动答题</div>
                 <button id="btn-init" class="apple-btn btn-warn">初始化规则</button>
+                <button id="btn-open-doubao" class="apple-btn btn-doubao">打开豆包</button>
                 <button id="btn-send-txt" class="apple-btn btn-primary">发送文字</button>
                 <button id="btn-send-img" class="apple-btn btn-success">发送截图</button>
 
@@ -249,6 +282,13 @@
                 setStatus("初始化中...", "#007aff");
                 GM_setValue("cx_ai_result", ""); // 清空旧答案
                 sendSignal({ type: "init" });     // 发送【初始化规则】指令到豆包
+            };
+            document.getElementById('btn-open-doubao').onclick = () => {
+                if (openDoubaoIfNeeded()) {
+                    setStatus("正在打开豆包...", "#007aff");
+                } else {
+                    setStatus("豆包页面已打开", "#34c759");
+                }
             };
             document.getElementById('btn-send-txt').onclick = () => sendText();  // 发送文字题目
             document.getElementById('btn-send-img').onclick = () => sendImg();    // 发送截图题目
@@ -416,7 +456,11 @@
          * @param {object} data 要发送的对象：类型+内容
          */
         function sendSignal(data) {
-            GM_setValue("cx_ai_signal", JSON.stringify({ ...data, ts: Date.now() }));
+            const message = { ...data, ts: Date.now(), id: `${Date.now()}_${Math.random()}` };
+            GM_setValue("cx_ai_signal", JSON.stringify(message));
+            if (openDoubaoIfNeeded()) {
+                setStatus("已发送，正在打开豆包...", "#007aff");
+            }
         }
 
         /**
@@ -681,6 +725,14 @@
         let pollTimer;         // 轮询计时器（监听AI输出）
         let watchDog;          // 超时看门狗
         let statusDom;         // 状态文本容器
+        const presenceKey = `${DOUBAO_PRESENCE_PREFIX}${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        const updatePresence = () => GM_setValue(presenceKey, { url: location.href, updatedAt: Date.now() });
+        updatePresence();
+        const presenceTimer = setInterval(updatePresence, 5000);
+        window.addEventListener("pagehide", () => {
+            clearInterval(presenceTimer);
+            GM_deleteValue(presenceKey);
+        }, { once: true });
         // 创建右下角悬浮面板
         createPanel();
         // 监听学习通发来的指令（文字/图片/初始化）
@@ -826,12 +878,25 @@
          * 监听学习通发来的指令信号
          */
         function listenMsg() {
-            GM_addValueChangeListener("cx_ai_signal", (_, __, val) => {
+            const receiveSignal = val => {
                 if (!val) return;
-                const bindUrl = GM_getValue("cx_exclusive_url", "");
-                if (bindUrl && bindUrl !== location.href) return;
-                try { handleMsg(JSON.parse(val)) } catch (e) { }
-            });
+                try {
+                    const data = JSON.parse(val);
+                    const bindUrl = GM_getValue("cx_exclusive_url", "");
+                    if (bindUrl && bindUrl !== location.href) return;
+                    if (!data.id || GM_getValue("cx_ai_signal_consumed", "") === data.id) return;
+                    GM_setValue("cx_ai_signal_consumed", data.id);
+                    handleMsg(data);
+                } catch (e) { }
+            };
+            GM_addValueChangeListener("cx_ai_signal", (_, __, val) => receiveSignal(val));
+
+            // 新打开的豆包页接收刚才触发自动打开的消息，忽略过期或已处理消息。
+            const pending = GM_getValue("cx_ai_signal", "");
+            try {
+                const data = JSON.parse(pending);
+                if (data.id && Date.now() - data.ts < 90000) receiveSignal(pending);
+            } catch (e) { }
         }
         /**
          * 处理学习通发来的指令：初始化规则 / 文字题目 / 图片题目
@@ -861,9 +926,8 @@
 示例：{"type":"0","answer":["A"]}
 2.多选题{"type":"1","answer":["A","B"]}
 示例：{"type":"1","answer":["B","C"]}
-3.判断题{"type":"3","answer":["A"]}
-示例：{"type":"3","answer":["A"]}
-判断题按页面选项字母返回A或B，不输出“正确/错误”文字。
+3.判断题{"type":"3","answer":["页面上的选项标签"]}
+页面选项显示“正确/错误”时，answer填写“正确”或“错误”；页面选项显示“A/B”时，填写对应字母。必须按当前题目实际显示的选项作答，不要自行把正确/错误映射到固定字母。
 4.填空题{"type":"2","answer":["第1空内容","第2空内容","第3空内容"]}
 重要规则：一题存在多个填空时，按题目从上到下空的顺序依次填写，一个空对应数组一个元素
 示例：两空题目 {"type":"2","answer":["3","4"]}
