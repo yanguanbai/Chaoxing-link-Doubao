@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         学习通豆包全自动答题
 // @namespace    com.chaoxing.doubao.auto
-// @version      1.5.7
+// @version      1.6.0
 // @author       Bart
 // @description  学习通 + 豆包 双向联动全自动答题脚本，支持文字/截图答题、跳过已答题目、自动下一题
 // @match        *://*.chaoxing.com/mooc-ans*
@@ -11,6 +11,7 @@
 // @grant        GM_getValue
 // @grant        GM_addValueChangeListener
 // @grant        unsafeWindow
+// @noframes
 // @require      https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js
 // @run-at       document-end
 // @license MIT
@@ -48,14 +49,12 @@
      * 根据当前域名，区分 学习通 / 豆包 分别初始化对应逻辑
      */
     function checkAndInit() {
-        // 先移除旧的悬浮面板，防止重复创建
-        const oldBox = document.querySelector('#ai-box');
-        if (oldBox) oldBox.remove();
-
         // 判断当前网站，进入对应初始化
         if (location.host.includes("chaoxing.com")) {
+            if (document.querySelector('#ai-box')) return;
             initChaoxing(); // 初始化 学习通 答题端
         } else if (location.host.includes("doubao.com")) {
+            if (document.querySelector('#db-panel')) return;
             initDoubao();   // 初始化 豆包 AI 解析端
         }
     }
@@ -233,7 +232,11 @@
             autoNextCheckbox = document.getElementById('autoNext');
             skipFilled = document.getElementById('skipFilled');
 
-            // 读取本地记录，恢复上次勾选状态
+            // 读取本地记录，恢复上次开关状态
+            autoNextCheckbox.checked = GM_getValue("autoNext_state", true);
+            autoNextCheckbox.addEventListener("change", () => {
+                GM_setValue("autoNext_state", autoNextCheckbox.checked);
+            });
             const savedSkip = GM_getValue("skipFilled_state", false);
             skipFilled.checked = savedSkip;
             // 勾选状态改变时，实时保存到本地
@@ -306,10 +309,10 @@
                 // 遍历所有填空输入框，任意一个为空则判定未答
                 for (let ta of textareaList) {
                     const cleanText = ta.value
-                        .replace(/<[^>]+>/g, "")
-                        .replace(/&nbsp;/g, " ")
-                        .replace(/\s/g, "")
-                        .trim();
+                    .replace(/<[^>]+>/g, "")
+                    .replace(/&nbsp;/g, " ")
+                    .replace(/\s/g, "")
+                    .trim();
                     if (cleanText === "") {
                         return false;
                     }
@@ -334,10 +337,10 @@
                     text = ta.value;
                 }
                 const cleanText = text
-                    .replace(/<[^>]+>/g, "")
-                    .replace(/&nbsp;/g, " ")
-                    .replace(/\s/g, "")
-                    .trim();
+                .replace(/<[^>]+>/g, "")
+                .replace(/&nbsp;/g, " ")
+                .replace(/\s/g, "")
+                .trim();
                 return cleanText !== "";
             }
 
@@ -346,12 +349,27 @@
         }
 
         /**
+         * 获取当前可见题目区域，避免把考试导航、题号卡片等页面内容一并发送。
+         */
+        function getQuestionContent() {
+            const visibleQuestion = Array.from(document.querySelectorAll('.questionLi'))
+                .find(question => question.getClientRects().length > 0
+                    && getComputedStyle(question).visibility !== 'hidden');
+            return visibleQuestion
+                || document.querySelector('.exam-content .TiMu, .TiMu')
+                || document.querySelector('.exam-content');
+        }
+
+        /**
          * 提取页面文字题目，发送给豆包AI
          */
         function sendText() {
             GM_setValue("cx_ai_result", ""); // 清空历史答案
-            // 定位答题区域
-            const wrap = document.querySelector('.exam-content') || document.body;
+            const wrap = getQuestionContent();
+            if (!wrap) {
+                setStatus("未找到当前题目区域", "#ff3b30");
+                return;
+            }
             // 提取纯文本并压缩空格
             const text = wrap.innerText.replace(/\s+/g, ' ').trim();
 
@@ -369,7 +387,11 @@
          */
         async function sendImg() {
             GM_setValue("cx_ai_result", ""); // 清空历史答案
-            const wrap = document.querySelector('.exam-content') || document.body;
+            const wrap = getQuestionContent();
+            if (!wrap) {
+                setStatus("未找到当前题目区域", "#ff3b30");
+                return;
+            }
             setStatus("高清截图处理中...", "#007aff");
 
             try {
@@ -530,7 +552,7 @@
                     opts.forEach(item => {
                         // 取内部的字母span
                         const span = item.querySelector("span.num_option, span.num_option_dx");
-                        if (!span) return;
+                        if(!span) return;
                         const realData = span.dataset.data?.trim();   // 后端真实提交值
                         const showText = span.textContent.trim();    // 页面展示字母
 
@@ -636,7 +658,7 @@
             document.activeElement?.blur(); // 失焦当前输入框
             // 匹配常规下一题按钮
             const btn = document.querySelector(".nextBtn,.nextChapter")
-                || [...document.querySelectorAll("button,a")].find(el => /下一/.test(el.innerText));
+            || [...document.querySelectorAll("button,a")].find(el => /下一/.test(el.innerText));
             btn?.click();
         }
     }
@@ -649,14 +671,12 @@
      * 功能：创建悬浮按钮、监听学习通指令、自动抓取AI答案回传
      */
     function initDoubao() {
+        if (document.querySelector('#db-panel')) return;
         // 等待页面完全加载再初始化
         if (document.readyState !== "complete") {
-            window.addEventListener("load", initDoubao);
+            window.addEventListener("load", initDoubao, { once: true });
             return;
         }
-        // 读取绑定地址，非绑定页面直接返回（多标签隔离）
-        const bindUrl = GM_getValue("cx_exclusive_url", "");
-        if (bindUrl && bindUrl !== location.href) return;
         let isWait = false;    // 是否正在等待AI回复
         let pollTimer;         // 轮询计时器（监听AI输出）
         let watchDog;          // 超时看门狗
@@ -691,23 +711,61 @@
                 .db-btn:hover { background: rgba(0,0,0,0.08); }
                 .db-btn-primary { background: #007aff; color: white; }
                 .db-btn-primary:hover { background: #0066d6; }
+                .db-settings { position: relative; }
+                .db-settings-menu {
+                    position: absolute; right: 0; bottom: calc(100% + 10px); width: 210px;
+                    padding: 12px; background: white; border: 1px solid #e5e5e5;
+                    border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,0.14);
+                    display: flex; flex-direction: column; gap: 8px; cursor: default;
+                }
+                .db-settings-menu[hidden] { display: none; }
+                .db-settings-menu .db-btn { width: 100%; }
             `;
             document.head.appendChild(style);
             const p = document.createElement("div");
+            p.id = "db-panel";
             p.className = "db-apple-panel";
             p.innerHTML = `
                 <span id="dbSta" class="db-status-dot" style="color:#007aff">● 待命</span>
-                <button id="bindBtn" class="db-btn">绑定专页</button>
                 <button id="catch-btn" class="db-btn db-btn-primary">手动抓取</button>
+                <div class="db-settings">
+                    <button id="db-settings-btn" class="db-btn" title="设置" aria-label="设置" aria-expanded="false">⚙</button>
+                    <div id="db-settings-menu" class="db-settings-menu" hidden>
+                        <span id="bind-status" style="font-size:11px;color:#515154"></span>
+                        <button id="bindBtn" class="db-btn">绑定当前页</button>
+                        <button id="unbindBtn" class="db-btn">清除绑定</button>
+                    </div>
+                </div>
             `;
             document.body.appendChild(p);
             // 赋予面板拖拽与吸附能力 (默认出现在右下角附近)
             makeElementDraggableAndSnappable(p, "db_panel_pos", { bottom: '24px', right: '24px' });
             statusDom = document.getElementById("dbSta");
-            // 绑定当前页面为专属通信页面
+            const settingsButton = document.getElementById("db-settings-btn");
+            const settingsMenu = document.getElementById("db-settings-menu");
+            settingsButton.onclick = () => {
+                refreshBindingStatus();
+                settingsMenu.hidden = !settingsMenu.hidden;
+                settingsButton.setAttribute("aria-expanded", String(!settingsMenu.hidden));
+            };
+            const bindingDom = document.getElementById("bind-status");
+            const refreshBindingStatus = () => {
+                const savedUrl = GM_getValue("cx_exclusive_url", "");
+                bindingDom.textContent = savedUrl
+                    ? (savedUrl === location.href ? "已绑定此页" : "绑定在其他页")
+                    : "未绑定";
+            };
+            refreshBindingStatus();
+            // 允许在任意豆包页覆盖失效的旧绑定。
             document.getElementById("bindBtn").onclick = () => {
                 GM_setValue("cx_exclusive_url", location.href);
-                alert("绑定成功，刷新页面生效");
+                refreshBindingStatus();
+                setSta("已绑定当前页", "#34c759");
+            };
+            document.getElementById("unbindBtn").onclick = () => {
+                GM_setValue("cx_exclusive_url", "");
+                refreshBindingStatus();
+                setSta("已清除绑定");
             };
             // 手动抓取答案按钮
             document.getElementById('catch-btn').onclick = doCatchAnswer;
@@ -737,7 +795,7 @@
          * @returns {boolean} 是否写入成功
          */
         function writeText(el, txt) {
-            if (!el) return false;
+            if(!el) return false;
             // 获取焦点
             el.focus();
             // 清空原有内容
@@ -762,7 +820,7 @@
          */
         function getSendBtn() {
             return document.querySelector('button[aria-label="send"]')
-                || document.getElementById("flow-end-msg-send");
+            || document.getElementById("flow-end-msg-send");
         }
         /**
          * 监听学习通发来的指令信号
@@ -770,6 +828,8 @@
         function listenMsg() {
             GM_addValueChangeListener("cx_ai_signal", (_, __, val) => {
                 if (!val) return;
+                const bindUrl = GM_getValue("cx_exclusive_url", "");
+                if (bindUrl && bindUrl !== location.href) return;
                 try { handleMsg(JSON.parse(val)) } catch (e) { }
             });
         }
@@ -801,9 +861,9 @@
 示例：{"type":"0","answer":["A"]}
 2.多选题{"type":"1","answer":["A","B"]}
 示例：{"type":"1","answer":["B","C"]}
-3.判断题{"type":"3","answer":["正确/错误"]}
+3.判断题{"type":"3","answer":["A"]}
 示例：{"type":"3","answer":["A"]}
-注意:判断题统一使用【A/B】作为答案内容
+判断题按页面选项字母返回A或B，不输出“正确/错误”文字。
 4.填空题{"type":"2","answer":["第1空内容","第2空内容","第3空内容"]}
 重要规则：一题存在多个填空时，按题目从上到下空的顺序依次填写，一个空对应数组一个元素
 示例：两空题目 {"type":"2","answer":["3","4"]}
@@ -844,9 +904,9 @@
                     await new Promise(resolve => {
                         const poll = setInterval(() => {
                             const fi = document.querySelector('input[type="file"][multiple]');
-                            if (fi) { clearInterval(poll); resolve(true); }
-                        }, 100)
-                    });
+                            if(fi){ clearInterval(poll); resolve(true); }
+                        },100)
+                        });
                     // 2. 获取隐藏的file input
                     const fileInput = document.querySelector('input[type="file"][multiple]');
                     if (!fileInput) {
@@ -868,7 +928,7 @@
                             const timeout = Date.now() - start > 6000;
                             if (uploading.length === 0 || timeout) {
                                 clearInterval(timer);
-                                if (timeout) setSta("图片上传超时，尝试发送");
+                                if(timeout) setSta("图片上传超时，尝试发送");
                                 resolve(true);
                             }
                         }, 200);
@@ -879,12 +939,12 @@
                     setSta("图片处理异常", "#ff3b30");
                 }
                 // 图片分支单独处理发送，不再走外层的ok判断！
-                if (ok) {
+                if(ok){
                     const sendBtn = getSendBtn();
                     if (sendBtn) {
                         sendBtn.disabled = false;
                         // 改用MouseEvent派发事件适配radix按钮
-                        const clickEvt = new MouseEvent("click", { bubbles: true, cancelable: true });
+                        const clickEvt = new MouseEvent("click", {bubbles:true,cancelable:true});
                         sendBtn.dispatchEvent(clickEvt);
                         setSta("解析中...");
                         startCatch();
@@ -892,7 +952,7 @@
                         isWait = false;
                         setSta("发送失败", "#ff3b30");
                     }
-                } else {
+                }else{
                     isWait = false;
                     setSta("录入失败", "#ff3b30");
                 }
@@ -932,6 +992,11 @@
          * @returns {boolean} 抓取是否成功
          */
         function doCatchAnswer() {
+            const bindUrl = GM_getValue("cx_exclusive_url", "");
+            if (bindUrl && bindUrl !== location.href) {
+                setSta("请先在设置中绑定当前页", "#ff3b30");
+                return false;
+            }
             setSta("抓取中...", "#ff9500");
             const allMessages = document.querySelectorAll('div[data-message-id]');
             if (!allMessages.length) {
