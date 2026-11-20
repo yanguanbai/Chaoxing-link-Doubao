@@ -35,8 +35,9 @@ The final confirmation must be clicked by you; a web page cannot silently instal
 
 - `src/` holds the public userscripts with their documentation, one directory per script.
 - `tools/sync-readme-versions.mjs` fills the version column of the table above from each script's `@version`; CI runs it with `--check` and fails when the two drift apart.
+- `tools/check-userscript-meta.mjs` checks that every script has the required metadata and an `x.y.z` `@version`.
 - `tools/check-docs.mjs` verifies that every raw install link in the docs points to a file that exists, and that each script's `@downloadURL` / `@updateURL` points to itself.
-- `.github/workflows/ci.yml` runs syntax checks, userscript metadata checks, the two checks above, on Node 20 and 22.
+- `.github/workflows/ci.yml` runs syntax checks, metadata checks and the two checks above, on Node 22 and 24.
 - `CHANGELOG.md` records per-version changes; the READMEs describe usage and do not duplicate version history.
 - `DISTRIBUTION.md` records source verification, third-party dependencies and licensing scope.
 

@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: ['20', '22']
+        node: ['22', '24']
     steps:
       - uses: actions/checkout@v4
 
@@ -30,24 +30,7 @@ jobs:
           done
 
       - name: Userscript metadata sanity
-        shell: bash
-        run: |
-          set -euo pipefail
-          fail=0
-          for f in src/*/*.user.js; do
-            for key in '@name' '@version' '@license' '@downloadURL' '@updateURL' '@match'; do
-              if ! grep -q -- "$key" "$f"; then
-                echo "::error file=$f::missing metadata $key"
-                fail=1
-              fi
-            done
-            v=$(grep -m1 -oP '^\s*//\s*@version\s+\K\S+' "$f")
-            if ! printf '%s' "$v" | grep -Eq '^\d+\.\d+\.\d+$'; then
-              echo "::error file=$f::@version is not x.y.z"
-              fail=1
-            fi
-          done
-          exit $fail
+        run: node tools/check-userscript-meta.mjs
 
       - name: README version column matches @version
         run: node tools/sync-readme-versions.mjs --check

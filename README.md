@@ -33,8 +33,9 @@ English version: [README.en.md](README.en.md)
 
 - `src/` 下是公开脚本及其文档，每个脚本一个子目录，源码、中文说明、English 说明放在一起。
 - `tools/sync-readme-versions.mjs` 用各脚本的 `@version` 回填上表版本列；CI 以 `--check` 运行，版本列与脚本不一致就失败。
+- `tools/check-userscript-meta.mjs` 校验脚本元数据齐全、`@version` 为 x.y.z。
 - `tools/check-docs.mjs` 校验文档里的 raw 安装链接都指向真实存在的文件，并确认每个脚本的 `@downloadURL` / `@updateURL` 指向自身。
-- `.github/workflows/ci.yml` 在 Node 20 与 22 上跑语法检查、脚本元数据检查与上面两项校验。
+- `.github/workflows/ci.yml` 在 Node 22 与 24 上跑语法检查、元数据检查与上面两项校验。
 - `CHANGELOG.md` 记录各脚本的逐版本变更；README 只描述用法，不重复维护版本流水。
 - `DISTRIBUTION.md` 记录发行前的来源核对、第三方依赖与许可证范围。
 
