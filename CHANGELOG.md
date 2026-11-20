@@ -53,6 +53,7 @@
 不属于脚本版本，仅记录 README / 仓库结构的调整。
 
 - 仓库结构重建：脚本移入 `src/<脚本名>/`，每个脚本配中英两份 README；根目录对齐同账号的脚本仓库结构（`README.md`、`README.en.md`、`DISTRIBUTION.md`、`LICENSE`、`.gitignore`、`CHANGELOG.md`）。`@downloadURL` / `@updateURL` 与所有 raw 安装链接同步改到 `src/` 路径。
+- 文档补 `[!IMPORTANT]` 警示块：明确纯文本粘贴助手是必须单独安装的第二个脚本，只装主脚本时简答题无法正常录入、整体不能正常使用；根 README 中英、两个脚本 README 中英同步。
 - 引入 CI 与配套工具，`ci.yml` 在 Node 20/22 上跑语法检查、脚本元数据检查、README 版本列校验与文档链接校验；`tools/sync-readme-versions.mjs` 用 `@version` 回填根 README 版本列，`tools/check-docs.mjs` 校验 raw 安装链接与更新地址。
 - 补英文文档：根目录 `README.en.md`，两个脚本各配 `README.en.md`，与中文版章节一一对应。
 - 移除安装首页 `index.html`，安装入口统一放在根 README 表格的 raw 链接，避免两处链接各自失效。

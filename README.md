@@ -21,6 +21,10 @@ English version: [README.en.md](README.en.md)
 - **截图所需扩展**：Disable Content-Security-Policy（[Chrome 版](https://chrome.google.com/webstore/detail/disable-content-security/ieelmcmcagommplceebfedjlakkhpden) / [另一作者版，含 .crx](https://github.com/WithoutHair/Disable-Content-Security-Policy)）。它松开学习通页面的 CSP，不装时截图会失败或截出空白；装完点扩展图标启用。
 - **外部库**：主脚本经 jsDelivr 加载 `html2canvas`，仅用于截图。来源核对见 [DISTRIBUTION.md](DISTRIBUTION.md)。
 
+> [!IMPORTANT]
+> **纯文本粘贴助手是必须单独安装的第二个脚本，不是可选项。**
+> 只装主脚本时，学习通简答题编辑器无法正常接收纯文本，答题流程不完整，脚本不能正常使用。请在装完主脚本后，继续点上表第二行的“安装”链接并确认安装；装好后油猴脚本列表里应当出现两条记录。
+
 ## 安装
 
 1. 安装并启用 Tampermonkey，允许它在网页上运行脚本；需要截图时再装上面的 CSP 扩展。

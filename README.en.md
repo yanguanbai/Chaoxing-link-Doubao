@@ -23,6 +23,10 @@ The two scripts are separate files and appear as two entries in the userscript l
 - **Screenshot extension**: Disable Content-Security-Policy ([Chrome](https://chrome.google.com/webstore/detail/disable-content-security/ieelmcmcagommplceebfedjlakkhpden) / [another author's build, .crx included](https://github.com/WithoutHair/Disable-Content-Security-Policy)). It relaxes the CSP header of the Chaoxing page; without it, screenshots fail or come out blank. Enable it by clicking the extension icon.
 - **Third-party library**: `html2canvas` is loaded from jsDelivr at runtime for screenshots only. See [DISTRIBUTION.md](DISTRIBUTION.md).
 
+> [!IMPORTANT]
+> **The plain-text paste helper is a required second script, not an optional extra.**
+> With only the main script, Chaoxing short-answer editors cannot take plain text properly, the flow is incomplete and the setup does not work. After installing the main script, use the second **Install** link above and confirm; the userscript list should then show two entries.
+
 ## Install
 
 1. Install and enable Tampermonkey and allow it to run on web pages; add the CSP extension above if you need screenshots.

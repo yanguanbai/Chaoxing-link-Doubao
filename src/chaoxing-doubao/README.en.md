@@ -22,6 +22,9 @@ Extracts the current question from a Chaoxing answer page, hands it to the Douba
 
 For screenshot mode, also install the Disable Content-Security-Policy extension and enable it, otherwise the page CSP blocks the canvas export.
 
+> [!IMPORTANT]
+> Short-answer questions need the [plain-text paste helper](../chaoxing-paste-helper/README.en.md), which is a required second script installed separately. With only this script, short answers cannot be entered properly and the setup does not work as a whole.
+
 ## Usage
 
 1. Open Doubao, sign in, and use the gear menu to bind the current page; without a binding the Doubao home page is used.

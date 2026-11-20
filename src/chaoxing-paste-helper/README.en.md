@@ -4,6 +4,10 @@ Current version: `1.2.1` · Author: Bart · [中文](README.md)
 
 A paste helper for the short-answer editors on Chaoxing pages. Image pastes are left untouched; text-only pastes are converted to plain text with line breaks preserved.
 
+> [!IMPORTANT]
+> **This script must be installed separately.** It is not part of the main script, and installing the main script will not bring it along.
+> With only the main script, short-answer editors cannot take plain text properly and the flow is incomplete. Install this script using the steps below; the userscript list should then show two entries.
+
 ## Features
 
 - Intercepts paste events on UEditor instances found on the Chaoxing page.
