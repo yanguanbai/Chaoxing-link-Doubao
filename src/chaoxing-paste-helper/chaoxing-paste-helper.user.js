@@ -1,13 +1,17 @@
 // ==UserScript==
 // @name         学习通强制纯文本粘贴助手
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.2.1
 // @description  自动识别剪贴板：有图片则原生粘贴，只有文本自动转纯文本粘贴（保留换行）
 // @author       Bart
 // @match        *://*.chaoxing.com/*
 // @grant        none
 // @run-at       document-end
 // @license MIT
+// @homepageURL https://github.com/yanguanbai/Chaoxing-link-Doubao
+// @supportURL  https://github.com/yanguanbai/Chaoxing-link-Doubao/issues
+// @downloadURL https://raw.githubusercontent.com/yanguanbai/Chaoxing-link-Doubao/main/src/chaoxing-paste-helper/chaoxing-paste-helper.user.js
+// @updateURL   https://raw.githubusercontent.com/yanguanbai/Chaoxing-link-Doubao/main/src/chaoxing-paste-helper/chaoxing-paste-helper.user.js
 // ==/UserScript==
 (function() {
     'use strict';

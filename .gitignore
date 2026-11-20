@@ -1,0 +1,10 @@
+# 维护笔记与临时导出
+/private/
+/*.tmp
+
+# 编辑器与系统缓存
+.DS_Store
+Thumbs.db
+__pycache__/
+*.py[cod]
+node_modules/

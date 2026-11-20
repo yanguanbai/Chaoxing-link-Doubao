@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         学习通豆包全自动答题
 // @namespace    com.chaoxing.doubao.auto
-// @version      1.6.1
+// @version      1.6.2
 // @author       Bart
 // @description  学习通 + 豆包 双向联动全自动答题脚本，支持文字/截图答题、跳过已答题目、自动下一题
 // @match        *://*.chaoxing.com/mooc-ans*
@@ -19,8 +19,10 @@
 // @run-at       document-end
 // @license MIT
 
-// @downloadURL https://update.greasyfork.org/scripts/579463/%E5%AD%A6%E4%B9%A0%E9%80%9A%E8%B1%86%E5%8C%85%E5%85%A8%E8%87%AA%E5%8A%A8%E7%AD%94%E9%A2%98.user.js
-// @updateURL https://update.greasyfork.org/scripts/579463/%E5%AD%A6%E4%B9%A0%E9%80%9A%E8%B1%86%E5%8C%85%E5%85%A8%E8%87%AA%E5%8A%A8%E7%AD%94%E9%A2%98.meta.js
+// @homepageURL   https://github.com/yanguanbai/Chaoxing-link-Doubao
+// @supportURL    https://github.com/yanguanbai/Chaoxing-link-Doubao/issues
+// @downloadURL   https://raw.githubusercontent.com/yanguanbai/Chaoxing-link-Doubao/main/src/chaoxing-doubao/chaoxing-doubao.user.js
+// @updateURL     https://raw.githubusercontent.com/yanguanbai/Chaoxing-link-Doubao/main/src/chaoxing-doubao/chaoxing-doubao.user.js
 // ==/UserScript==
 
 (function () {
