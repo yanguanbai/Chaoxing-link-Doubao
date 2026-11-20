@@ -19,13 +19,17 @@ The two scripts are separate files and appear as two entries in the userscript l
 
 ## Requirements
 
-- **Userscript manager**: Tampermonkey. Only Tampermonkey has been tested; other managers are unverified.
-- **Screenshot extension**: Disable Content-Security-Policy ([Chrome](https://chrome.google.com/webstore/detail/disable-content-security/ieelmcmcagommplceebfedjlakkhpden) / [another author's build, .crx included](https://github.com/WithoutHair/Disable-Content-Security-Policy)). It relaxes the CSP header of the Chaoxing page; without it, screenshots fail or come out blank. Enable it by clicking the extension icon.
-- **Third-party library**: `html2canvas` is loaded from jsDelivr at runtime for screenshots only. See [DISTRIBUTION.md](DISTRIBUTION.md).
+> [!IMPORTANT]
+> **The Disable Content-Security-Policy extension is required — it is what connects the two pages.**
+> Chaoxing pages carry a CSP header, and the script moves questions, screenshots and answers between the Chaoxing page and the Doubao page over that link. Without the extension, screenshots are blocked outright and cross-page data can be cut off, so the script does not work. After installing it, **click the extension icon to confirm it is enabled** (it works per tab, so keep it enabled after refreshing).
+> Links: [Chrome](https://chrome.google.com/webstore/detail/disable-content-security/ieelmcmcagommplceebfedjlakkhpden) · [another author's build, .crx included](https://github.com/WithoutHair/Disable-Content-Security-Policy)
 
 > [!IMPORTANT]
 > **The plain-text paste helper is a required second script, not an optional extra.**
 > With only the main script, Chaoxing short-answer editors cannot take plain text properly, the flow is incomplete and the setup does not work. After installing the main script, use the second **Install** link above and confirm; the userscript list should then show two entries.
+
+- **Userscript manager**: Tampermonkey. Only Tampermonkey has been tested; other managers are unverified.
+- **Third-party library**: `html2canvas` is loaded from jsDelivr at runtime for screenshots only. See [DISTRIBUTION.md](DISTRIBUTION.md).
 
 ## Install
 

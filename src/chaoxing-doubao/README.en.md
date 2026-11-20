@@ -20,7 +20,9 @@ Extracts the current question from a Chaoxing answer page, hands it to the Douba
 2. Click the Install link in the repository root README and confirm.
 3. Refresh the Chaoxing answer page.
 
-For screenshot mode, also install the Disable Content-Security-Policy extension and enable it, otherwise the page CSP blocks the canvas export.
+> [!IMPORTANT]
+> **Install and enable the Disable Content-Security-Policy extension before using screenshots — it is what connects the two pages.**
+> Without it the page CSP blocks the canvas export and cross-page data can be cut off, so the script does not work. Click the extension icon to confirm it is enabled, and keep it enabled per tab.
 
 > [!IMPORTANT]
 > Short-answer questions need the [plain-text paste helper](../chaoxing-paste-helper/README.en.md), which is a required second script installed separately. With only this script, short answers cannot be entered properly and the setup does not work as a whole.

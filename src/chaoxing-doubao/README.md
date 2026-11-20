@@ -20,7 +20,9 @@
 2. 点击根目录 README 中的安装链接并确认。
 3. 刷新学习通答题页面。
 
-需要“发送截图”时，另装 Disable Content-Security-Policy 扩展并点图标启用，否则截图会被页面 CSP 拦下。
+> [!IMPORTANT]
+> **截图前必须装好并启用 Disable Content-Security-Policy 扩展，它负责连通学习通与豆包两个页面。**
+> 不启用时截图会被页面 CSP 直接拦下，跨页面数据也可能被阻断，脚本无法正常工作。装完点扩展图标确认启用，并按标签页保持启用态。
 
 > [!IMPORTANT]
 > 简答题需要配套的[纯文本粘贴助手](../chaoxing-paste-helper/README.md)，它是必须单独安装的第二个脚本。只装本脚本时简答题无法正常录入，整体不能正常使用。

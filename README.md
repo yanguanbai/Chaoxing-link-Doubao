@@ -17,13 +17,17 @@ English version: [README.en.md](README.en.md)
 
 ## 前置依赖
 
-- **脚本管理器**：Tampermonkey。仅在 Tampermonkey 上验证过，其它管理器未测试。
-- **截图所需扩展**：Disable Content-Security-Policy（[Chrome 版](https://chrome.google.com/webstore/detail/disable-content-security/ieelmcmcagommplceebfedjlakkhpden) / [另一作者版，含 .crx](https://github.com/WithoutHair/Disable-Content-Security-Policy)）。它松开学习通页面的 CSP，不装时截图会失败或截出空白；装完点扩展图标启用。
-- **外部库**：主脚本经 jsDelivr 加载 `html2canvas`，仅用于截图。来源核对见 [DISTRIBUTION.md](DISTRIBUTION.md)。
+> [!IMPORTANT]
+> **必须安装 Disable Content-Security-Policy 扩展，它负责连通学习通与豆包两个页面。**
+> 学习通页面带 CSP 限制，脚本在学习通与豆包之间传递题目、截图和答案是靠这条链路完成的；不装或没启用时，截图会被直接拦下，跨页面数据也可能被阻断，脚本无法正常工作。装完后**点一下扩展图标确认已启用**（按标签页生效，刷新页面后仍要保持启用态）。
+> 入口：[Chrome 版](https://chrome.google.com/webstore/detail/disable-content-security/ieelmcmcagommplceebfedjlakkhpden) ｜ [另一作者版，含 .crx](https://github.com/WithoutHair/Disable-Content-Security-Policy)
 
 > [!IMPORTANT]
 > **纯文本粘贴助手是必须单独安装的第二个脚本，不是可选项。**
 > 只装主脚本时，学习通简答题编辑器无法正常接收纯文本，答题流程不完整，脚本不能正常使用。请在装完主脚本后，继续点上表第二行的“安装”链接并确认安装；装好后油猴脚本列表里应当出现两条记录。
+
+- **脚本管理器**：Tampermonkey。仅在 Tampermonkey 上验证过，其它管理器未测试。
+- **外部库**：主脚本经 jsDelivr 加载 `html2canvas`，仅用于截图。来源核对见 [DISTRIBUTION.md](DISTRIBUTION.md)。
 
 ## 安装
 
