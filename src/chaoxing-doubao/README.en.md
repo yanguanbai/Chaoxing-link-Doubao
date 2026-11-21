@@ -1,17 +1,20 @@
 # Chaoxing Doubao Helper
 
-Current version: `1.6.2` · Author: Bart · [中文](README.md)
+Current version: `1.6.3` · Author: Bart · [中文](README.md)
 
 Extracts the current question from a Chaoxing answer page, hands it to the Doubao web chat for assistance, and writes the result back into the page. The script runs on both sides: the Chaoxing page handles extraction and filling, the Doubao page handles the chat and hands the reply back, and the two halves talk through the userscript manager's cross-tab storage.
 
 ## Features
 
-- Reads the currently visible question block (`.questionLi`, with `.TiMu` / `.exam-content` as fallbacks); when no block is found it reports an error instead of sending the whole page.
-- Two send modes: question text, or a rendered screenshot of the question area for formula and image questions.
-- Opens the Doubao page when it is not running: the bound page if available, otherwise the Doubao home page. The newly opened page picks up the pending message, so it is not processed twice.
+- **Homework pages** are extracted question by question: only the stem and options are sent, so headers such as question count, full marks, time window and the answer-card strip stay on the page. Screenshots render only the question blocks.
+- **Exam pages** read only the currently visible question, so exam navigation and the question-number strip are never sent.
+- Two send modes: question text, or a rendered screenshot for formula and image questions.
+- Opens the Doubao page when it is not running; the newly opened page picks up the pending message, so it is not processed twice.
+- Binding is per browser tab: switching Doubao to a `/chat/<id>` conversation keeps the binding valid, so pages are not reopened and signals are not dropped.
+- Delivery states are reported back: received, done, failed and timed out are shown separately on the panel instead of staying on "sent".
 - Parses the JSON in the Doubao reply and writes the options back for the detected question type; a manual fetch button exists on the Doubao panel.
-- Page binding lives in the panel settings menu: bind the current page, check status, clear the binding. A stale binding can be replaced without opening the old page.
-- The `auto next question` and `skip answered` toggles are persisted and restored after a reload.
+- Binding lives in the panel settings menu: bind the current tab, check status, clear the binding.
+- The `skip answered` toggle is persisted. `auto next question` only appears and takes effect on exam pages; homework pages never turn pages automatically.
 - True/false questions follow the page's own labels: text when the page shows 正确/错误, letters when it shows A/B.
 
 ## Install
@@ -21,19 +24,19 @@ Extracts the current question from a Chaoxing answer page, hands it to the Douba
 3. Refresh the Chaoxing answer page.
 
 > [!IMPORTANT]
-> **Install and enable the Disable Content-Security-Policy extension before using screenshots — it is what connects the two pages.**
-> Without it the page CSP blocks the canvas export and cross-page data can be cut off, so the script does not work. Click the extension icon to confirm it is enabled, and keep it enabled per tab.
+> **Install and enable the Disable Content-Security-Policy extension if you want screenshots.**
+> The Chaoxing page CSP blocks the `html2canvas` script loaded from jsDelivr and the canvas export, so screenshots fail without it. Text sending and cross-page messaging are unaffected. Click the extension icon to confirm it is enabled, and keep it enabled per tab.
 
 > [!IMPORTANT]
 > Short-answer questions need the [plain-text paste helper](../chaoxing-paste-helper/README.en.md), which is a required second script installed separately. With only this script, short answers cannot be entered properly and the setup does not work as a whole.
 
 ## Usage
 
-1. Open Doubao, sign in, and use the gear menu to bind the current page; without a binding the Doubao home page is used.
+1. Open Doubao, sign in, and use the gear menu to bind the current tab; without a binding any Doubao page can take the message.
 2. Open the Chaoxing answer page and click the rule initialiser.
 3. Send text or a screenshot depending on the question. If Doubao is not open, the message is stored first and the page is opened.
 4. The reply is fetched automatically, or manually from the Doubao panel.
-5. Filling follows the two toggles; question switching depends on page loading and is re-evaluated on the next round when loading is slow.
+5. On homework pages the whole page is sent once and filled in one pass. On exam pages one question is sent at a time; turn on `auto next question` to move on automatically.
 
 ## Supported pages
 
@@ -49,8 +52,9 @@ Page matching only means the script runs on that URL, not that every question la
 
 - Userscript manager: Tampermonkey only (untested elsewhere).
 - Screenshots: `html2canvas` loaded from jsDelivr plus the Disable Content-Security-Policy extension.
-- `@noframes` keeps a single instance per page.
-- Question types that cannot be recognised are skipped rather than guessed.
+- `@noframes` keeps one instance per page; question pages embedded in a child frame are not supported.
+- Unrecognised question types are skipped rather than guessed.
+- Binding is per tab; with several Doubao tabs open, bind the one you want to answer in.
 
 ## Privacy
 

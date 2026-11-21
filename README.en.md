@@ -12,16 +12,16 @@ No userscript manager yet? Install [Tampermonkey](https://www.tampermonkey.net/)
 
 | Script | What it does | Version | Docs & Install |
 |---|---|---:|---|
-| Chaoxing Doubao Helper | Reads the current question, sends text or a screenshot, fetches the reply, fills answers, binds the Doubao page | 1.6.2 | [中文](src/chaoxing-doubao/README.md) · [English](src/chaoxing-doubao/README.en.md) · [Install](https://raw.githubusercontent.com/yanguanbai/Chaoxing-link-Doubao/main/src/chaoxing-doubao/chaoxing-doubao.user.js) |
-| Plain-text Paste Helper | Pastes plain text into short-answer editors while leaving image pastes untouched | 1.2.1 | [中文](src/chaoxing-paste-helper/README.md) · [English](src/chaoxing-paste-helper/README.en.md) · [Install](https://raw.githubusercontent.com/yanguanbai/Chaoxing-link-Doubao/main/src/chaoxing-paste-helper/chaoxing-paste-helper.user.js) |
+| Chaoxing Doubao Helper | Reads the current question, sends text or a screenshot, fetches the reply, fills answers, binds the Doubao page | 1.6.3 | [中文](src/chaoxing-doubao/README.md) · [English](src/chaoxing-doubao/README.en.md) · [Install](https://raw.githubusercontent.com/yanguanbai/Chaoxing-link-Doubao/main/src/chaoxing-doubao/chaoxing-doubao.user.js) |
+| Plain-text Paste Helper | Pastes plain text into short-answer editors while leaving image pastes untouched | 1.2.2 | [中文](src/chaoxing-paste-helper/README.md) · [English](src/chaoxing-paste-helper/README.en.md) · [Install](https://raw.githubusercontent.com/yanguanbai/Chaoxing-link-Doubao/main/src/chaoxing-paste-helper/chaoxing-paste-helper.user.js) |
 
 The two scripts are separate files and appear as two entries in the userscript list. The helper is not bundled into the main script.
 
 ## Requirements
 
 > [!IMPORTANT]
-> **The Disable Content-Security-Policy extension is required — it is what connects the two pages.**
-> Chaoxing pages carry a CSP header, and the script moves questions, screenshots and answers between the Chaoxing page and the Doubao page over that link. Without the extension, screenshots are blocked outright and cross-page data can be cut off, so the script does not work. After installing it, **click the extension icon to confirm it is enabled** (it works per tab, so keep it enabled after refreshing).
+> **The Disable Content-Security-Policy extension is required for screenshots.**
+> The Chaoxing page CSP blocks the `html2canvas` script loaded from jsDelivr and the canvas export. Without the extension, screenshots fail; text sending is unaffected. Cross-page data uses the userscript manager's local storage and is not affected by CSP. After installing it, **click the extension icon to confirm it is enabled** (it works per tab, so keep it enabled after refreshing).
 > Links: [Chrome](https://chrome.google.com/webstore/detail/disable-content-security/ieelmcmcagommplceebfedjlakkhpden) · [another author's build, .crx included](https://github.com/WithoutHair/Disable-Content-Security-Policy)
 
 > [!IMPORTANT]
@@ -35,7 +35,7 @@ The two scripts are separate files and appear as two entries in the userscript l
 
 1. Install and enable Tampermonkey and allow it to run on web pages; add the CSP extension above if you need screenshots.
 2. Click an **Install** link above and confirm the extension prompt. Do this once per script.
-3. Refresh the Chaoxing answer page (`mooc-ans` or `exam-ans`). The answer panel appears in the bottom-right corner.
+3. Refresh the Chaoxing answer page (`mooc-ans` or `exam-ans`). The draggable answer panel appears on the left side of the page.
 
 The final confirmation must be clicked by you; a web page cannot silently install extensions or userscripts. Manual install: userscript panel → "Add new script" → paste the full file from `src/` → save.
 

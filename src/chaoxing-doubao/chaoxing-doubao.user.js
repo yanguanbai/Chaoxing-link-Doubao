@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         学习通豆包全自动答题
 // @namespace    com.chaoxing.doubao.auto
-// @version      1.6.2
+// @version      1.6.3
 // @author       Bart
 // @description  学习通 + 豆包 双向联动全自动答题脚本，支持文字/截图答题、跳过已答题目、自动下一题
 // @match        *://*.chaoxing.com/mooc-ans*
@@ -31,22 +31,53 @@
     const win = unsafeWindow;
     const DOUBAO_PRESENCE_PREFIX = "cx_doubao_presence_";
     const DOUBAO_DEFAULT_URL = "https://www.doubao.com/";
+    // 豆包页心跳超过该时长即视为已关闭（后台标签定时器会被节流到约 1 分钟，阈值必须远大于它）
+    const PRESENCE_STALE_MS = 120000;
+    // 信号与答案的有效期，超过视为过期，避免旧消息串到新题目
+    const SIGNAL_FRESH_MS = 120000;
+    const ACK_TIMEOUT_MS = 75000;
 
     // 记录上一次页面地址，用于监听页面跳转/路由切换
     let lastUrl = location.href;
 
     /**
-     * 页面DOM变动监听器
-     * 作用：监听页面刷新、切换题目、路由跳转，自动重新初始化脚本
+     * 地址轮询代替整棵 DOM 的 MutationObserver
+     * 作用：路由变化时重新初始化；轮询只比较 href，开销可以忽略
      */
-    new MutationObserver(() => {
-        // 地址发生变化 = 页面跳转/切题
-        if (location.href !== lastUrl) {
-            lastUrl = location.href;
-            // 延迟1秒执行初始化，等待页面DOM加载完成
-            setTimeout(checkAndInit, 1000);
+    setInterval(() => {
+        if (location.href === lastUrl) return;
+        lastUrl = location.href;
+        // 同一窗口里作业页 ↔ 考试页切换时，"自动下一题"只属于考试页
+        const examRow = document.getElementById("row-autoNext");
+        const examNow = location.pathname.includes("/exam-ans");
+        if (examRow) {
+            examRow.style.display = examNow ? "flex" : "none";
+            const box = document.getElementById("autoNext");
+            // 进入考试页时按存储恢复开关，避免面板是在作业页创建时留下的未勾选状态
+            if (examNow && box) box.checked = GM_getValue("autoNext_exam_state", true);
         }
-    }).observe(document.body, { childList: true, subtree: true });
+        setTimeout(checkAndInit, 800);
+    }, 300);
+
+    /**
+     * 跨标签值变更监听，兼容不支持 GM_addValueChangeListener 的脚本管理器
+     * @param {string} key 存储键
+     * @param {(val:any, oldVal:any)=>void} cb 回调
+     */
+    function onValueChange(key, cb) {
+        if (typeof GM_addValueChangeListener === "function") {
+            return GM_addValueChangeListener(key, (_, oldVal, val) => cb(val, oldVal));
+        }
+        let snapshot = JSON.stringify(GM_getValue(key, ""));
+        return setInterval(() => {
+            const raw = GM_getValue(key, "");
+            const cur = JSON.stringify(raw);
+            if (cur === snapshot) return;
+            const oldVal = snapshot;
+            snapshot = cur;
+            cb(raw, oldVal);
+        }, 500);
+    }
 
     // 页面首次加载，执行初始化判断
     checkAndInit();
@@ -66,22 +97,32 @@
         }
     }
 
-    function getDoubaoUrl() {
-        return GM_getValue("cx_exclusive_url", "") || DOUBAO_DEFAULT_URL;
+    // 旧版按整条 URL 绑定，升级后只保留"打开页面"的地址，绑定关系交给标签页 token
+    if (!GM_getValue("cx_doubao_url", "") && GM_getValue("cx_exclusive_url", "")) {
+        GM_setValue("cx_doubao_url", GM_getValue("cx_exclusive_url", ""));
     }
 
+    function getDoubaoUrl() {
+        return GM_getValue("cx_doubao_url", "") || DOUBAO_DEFAULT_URL;
+    }
+
+    /**
+     * 是否存在可用的豆包页面
+     * 绑定按标签页 token 判定，地址变化（首页 → /chat/<id>）不影响结果
+     */
     function hasActiveDoubaoPage() {
         const now = Date.now();
-        const boundUrl = GM_getValue("cx_exclusive_url", "");
+        const target = GM_getValue("cx_doubao_target", "");
         let active = false;
         GM_listValues().forEach(key => {
             if (!key.startsWith(DOUBAO_PRESENCE_PREFIX)) return;
             const page = GM_getValue(key, null);
-            if (!page || now - page.updatedAt >= 15000) {
+            if (!page || now - page.updatedAt >= PRESENCE_STALE_MS) {
                 GM_deleteValue(key);
                 return;
             }
-            if (boundUrl ? page.url === boundUrl : page.url.includes("doubao.com")) active = true;
+            // 已绑定：只认绑定的那个标签页；未绑定：任意豆包页都算可用
+            if (target ? page.token === target : true) active = true;
         });
         return active;
     }
@@ -108,6 +149,9 @@
         // 读取历史缓存位置或应用默认合适位置
         const savedPos = GM_getValue(storageKey, null);
         if (savedPos) {
+            // 定位改由 left/top 接管，必须清掉默认的 right/bottom，否则 fixed 元素会被拉伸
+            el.style.right = 'auto';
+            el.style.bottom = 'auto';
             if (savedPos.left !== undefined) el.style.left = savedPos.left + 'px';
             if (savedPos.top !== undefined) el.style.top = savedPos.top + 'px';
         } else {
@@ -120,6 +164,13 @@
             if (['BUTTON', 'INPUT', 'SPAN', 'LABEL'].includes(e.target.tagName)) return;
             isDragging = true;
             el.style.transition = 'none'; // 拖拽时关闭过渡动画
+
+            // 从 right/bottom 定位切换到 left/top 定位
+            const rect0 = el.getBoundingClientRect();
+            el.style.right = 'auto';
+            el.style.bottom = 'auto';
+            el.style.left = rect0.left + 'px';
+            el.style.top = rect0.top + 'px';
 
             const rect = el.getBoundingClientRect();
             initialX = rect.left;
@@ -167,6 +218,7 @@
             }
 
             el.style.left = finalX + 'px';
+            el.style.top = rect.top + 'px';
 
             // 实时保存位置状态
             GM_setValue(storageKey, { left: finalX, top: rect.top });
@@ -182,14 +234,20 @@
      * 功能：创建悬浮控制面板、开启答案监听、答题核心逻辑
      */
     function initChaoxing() {
+        // 实时判断，避免同一窗口从作业页跳到考试页后模式仍是旧的
+        const isExam = () => location.pathname.includes("/exam-ans");
         let statusDiv;          // 状态显示文本容器
         let autoNextCheckbox;   // 自动下一题 复选框
         let skipFilled;         // 跳过已答题目 复选框
+        let pendingSignalId = null; // 最近一次发出、尚未回终态的信号
+        let sendWatchdog;       // 发送后等待豆包响应的看门狗
 
         // 1. 创建页面悬浮UI面板
         createUI();
         // 2. 开启答案接收监听（接收豆包返回的答案）
         listenAnswer();
+        // 3. 开启处理状态监听（豆包是否收到、是否失败）
+        listenAck();
 
         /**
          * 创建左侧悬浮控制面板
@@ -245,9 +303,9 @@
                 <button id="btn-send-txt" class="apple-btn btn-primary">发送文字</button>
                 <button id="btn-send-img" class="apple-btn btn-success">发送截图</button>
 
-                <label class="apple-switch-label">
+                <label class="apple-switch-label" id="row-autoNext" style="display:none">
                     <span>自动下一题</span>
-                    <input type="checkbox" id="autoNext" checked>
+                    <input type="checkbox" id="autoNext">
                     <div class="apple-switch"></div>
                 </label>
                 <label class="apple-switch-label">
@@ -268,9 +326,14 @@
             skipFilled = document.getElementById('skipFilled');
 
             // 读取本地记录，恢复上次开关状态
-            autoNextCheckbox.checked = GM_getValue("autoNext_state", true);
+            // 作业页整页发送后不再翻页，"自动下一题"只对考试页有意义，作业页直接隐藏
+            const autoNextRow = document.getElementById('row-autoNext');
+            const examMode = isExam();
+            autoNextRow.style.display = examMode ? 'flex' : 'none';
+            autoNextCheckbox.checked = examMode ? GM_getValue("autoNext_exam_state", true) : false;
             autoNextCheckbox.addEventListener("change", () => {
-                GM_setValue("autoNext_state", autoNextCheckbox.checked);
+                // 用实时判断而不是建面板时的快照，同窗口切到考试页后也能正确持久化
+                if (isExam()) GM_setValue("autoNext_exam_state", autoNextCheckbox.checked);
             });
             const savedSkip = GM_getValue("skipFilled_state", false);
             skipFilled.checked = savedSkip;
@@ -283,7 +346,7 @@
             document.getElementById('btn-init').onclick = () => {
                 setStatus("初始化中...", "#007aff");
                 GM_setValue("cx_ai_result", ""); // 清空旧答案
-                sendSignal({ type: "init" });     // 发送【初始化规则】指令到豆包
+                sendSignal({ type: "init" }, "规则已发送");     // 发送【初始化规则】指令到豆包
             };
             document.getElementById('btn-open-doubao').onclick = () => {
                 if (openDoubaoIfNeeded()) {
@@ -367,10 +430,10 @@
                 const ta = block.querySelector('textarea[id^="answer"]');
                 if (!ta) return false;
                 let text = "";
-                // 优先读UEditor编辑器内容
-                if (window.UE && window.UE.getEditor) {
+                // 优先读UEditor编辑器内容（统一用页面真实 window，沙箱 window 上通常没有 UE）
+                if (win.UE && win.UE.getEditor) {
                     try {
-                        const ed = UE.getEditor(ta.id);
+                        const ed = win.UE.getEditor(ta.id);
                         text = ed.getContentTxt ? ed.getContentTxt() : ed.getContent();
                     } catch (e) {
                         text = ta.value;
@@ -391,19 +454,30 @@
         }
 
         /**
-         * 获取当前可见题目区域，避免把考试导航、题号卡片等页面内容一并发送。
+         * 作业页发送整页题目；考试页只发送当前可见题目，避免把考试导航、题号卡片一并发送。
          */
         function getQuestionContent() {
-            const visibleQuestion = Array.from(document.querySelectorAll('.questionLi'))
-                .find(question => question.getClientRects().length > 0
-                    && getComputedStyle(question).visibility !== 'hidden');
-            return visibleQuestion
+            if (!isExam()) {
+                return document.querySelector('.exam-content') || document.body;
+            }
+            return getVisibleQuestion()
                 || document.querySelector('.exam-content .TiMu, .TiMu')
                 || document.querySelector('.exam-content');
         }
 
         /**
+         * 考试页当前可见的题目容器
+         * @returns {HTMLElement|null}
+         */
+        function getVisibleQuestion() {
+            return Array.from(document.querySelectorAll('.questionLi'))
+                .find(question => question.getClientRects().length > 0
+                    && getComputedStyle(question).visibility !== 'hidden') || null;
+        }
+
+        /**
          * 提取页面文字题目，发送给豆包AI
+         * 作业页逐题拼装题干与选项，只保留有效信息，不整段抓 .exam-content 的页面噪音
          */
         function sendText() {
             GM_setValue("cx_ai_result", ""); // 清空历史答案
@@ -412,20 +486,58 @@
                 setStatus("未找到当前题目区域", "#ff3b30");
                 return;
             }
-            // 提取纯文本并压缩空格
-            const text = wrap.innerText.replace(/\s+/g, ' ').trim();
+
+            const text = isExam()
+                ? wrap.innerText.replace(/\s+/g, ' ').trim()
+                : buildQuestionText();
 
             if (text.length > 0) {
-                sendSignal({ type: "txt", data: text });
-                setStatus("文字已发送", "#007aff");
+                sendSignal({ type: "txt", data: text }, "文字已发送");
             } else {
                 setStatus("未获取到文字", "#ff3b30");
             }
         }
 
         /**
+         * 按题目块拼装纯文本：第 N 题 + 题干 + 各选项字母与内容
+         * 只读 .questionLi 内部有效节点，题量、满分、作答时间、答题卡等页面元素不会被带入
+         * @returns {string}
+         */
+        function buildQuestionText() {
+            const blocks = getAllQuestions();
+            if (!blocks.length) return "";
+
+            const parts = blocks.map((block, idx) => {
+                const rawType = block.getAttribute("typename") || "";
+                const type = rawType.replace(/题$/, "") || "未知题型";
+
+                // 题干优先取标题节点，取不到再退回整块文本
+                const stemEl = block.querySelector('.Zy_TItle, .qtContent, .Zy_TItle_title');
+                const stemText = (stemEl ? stemEl.innerText : block.innerText)
+                    .replace(/\s+/g, ' ').trim();
+
+                // 选项：字母（页面展示）+ 选项内容
+                const opts = [...block.querySelectorAll('div.answerBg')].map(option => {
+                    const span = option.querySelector('span.num_option, span.num_option_dx');
+                    const label = span ? span.textContent.trim() : "";
+                    const content = option.innerText
+                        .replace(label, "")
+                        .replace(/\s+/g, ' ').trim();
+                    return label ? `${label} ${content}`.trim() : content;
+                }).filter(Boolean);
+
+                const head = `第${idx + 1}题（${type}）`;
+                return opts.length
+                    ? `${head} ${stemText}\n${opts.join("\n")}`
+                    : `${head} ${stemText}`;
+            });
+
+            return parts.join("\n\n");
+        }
+
+        /**
          * 对答题区域截图，转图片Base64发送给豆包AI
-         * 异步函数，依赖html2canvas
+         * 作业页只渲染题目块，避免把页面导航、答题卡一起截进去
          */
         async function sendImg() {
             GM_setValue("cx_ai_result", ""); // 清空历史答案
@@ -434,149 +546,217 @@
                 setStatus("未找到当前题目区域", "#ff3b30");
                 return;
             }
+            if (typeof html2canvas !== "function") {
+                setStatus("截图库未加载（检查 jsDelivr 与 CSP 扩展）", "#ff3b30");
+                return;
+            }
             setStatus("高清截图处理中...", "#007aff");
 
+            const { target, cleanup } = buildShotTarget(wrap);
             try {
                 // 调用html2canvas绘制高清画布
-                const canvas = await html2canvas(wrap, {
+                const canvas = await html2canvas(target, {
                     useCORS: true,
                     allowTaint: false,
                     scale: 2.5,
                     dpi: 300
                 });
                 // 画布转图片Base64并发送
-                sendSignal({ type: "img", data: canvas.toDataURL('image/png') });
-                setStatus("高清截图已发送", "#34c759");
+                sendSignal({ type: "img", data: canvas.toDataURL('image/png') }, "高清截图已发送");
             } catch (e) {
                 setStatus("截图失败", "#ff3b30");
+            } finally {
+                cleanup();
             }
+        }
+
+        /**
+         * 截图渲染目标：考试页直接用当前题目；作业页克隆所有题目块放进离屏容器
+         * @param {HTMLElement} wrap 当前题目区域
+         * @returns {{target: HTMLElement, cleanup: Function}}
+         */
+        function buildShotTarget(wrap) {
+            const noop = () => { };
+            if (isExam()) return { target: wrap, cleanup: noop };
+
+            const blocks = getAllQuestions();
+            if (!blocks.length) return { target: wrap, cleanup: noop };
+
+            const width = Math.max(360, wrap.getBoundingClientRect().width || 900);
+            const holder = document.createElement('div');
+            holder.setAttribute('data-html2canvas-ignore', 'false');
+            holder.style.cssText = `position: fixed; left: -10000px; top: 0; width: ${width}px;`
+                + 'background: #fff; padding: 16px; font-family: -apple-system, "Microsoft YaHei", sans-serif; color: #1d1d1f;';
+
+            blocks.forEach(block => {
+                const clone = block.cloneNode(true);
+                // 去掉评分、我的答案、解析、按钮等与题目无关的节点
+                clone.querySelectorAll('button, .marking, .questionScore, .ans-cc, .analysis,'
+                    + ' .Cy_ulTop, .Cy_ul, [data-html2canvas-ignore="true"]').forEach(node => node.remove());
+                holder.appendChild(clone);
+            });
+
+            document.body.appendChild(holder);
+            return { target: holder, cleanup: () => holder.remove() };
         }
 
         /**
          * 跨页面通信：发送指令/数据到豆包端
-         * 依靠GM_setValue实现两页面数据互通
+         * 依靠 GM 存储实现两页面数据互通，带目标标签页、消息 id 与超时看门狗
          * @param {object} data 要发送的对象：类型+内容
+         * @param {string} okText 成功拿到接收回执前的提示文案
          */
-        function sendSignal(data) {
-            const message = { ...data, ts: Date.now(), id: `${Date.now()}_${Math.random()}` };
-            GM_setValue("cx_ai_signal", JSON.stringify(message));
+        function sendSignal(data, okText) {
+            const message = {
+                ...data,
+                ts: Date.now(),
+                id: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
+                // 未绑定时为空，任意豆包页都可以接手；绑定后只投递给该标签页
+                target: GM_getValue("cx_doubao_target", "")
+            };
+            pendingSignalId = message.id;
+            GM_setValue("cx_ai_signal", message);
+
             if (openDoubaoIfNeeded()) {
-                setStatus("已发送，正在打开豆包...", "#007aff");
+                setStatus(`${okText}，正在打开豆包...`, "#007aff");
+            } else {
+                setStatus(`${okText}，等待豆包接收...`, "#007aff");
             }
+
+            // 豆包端没有回终态时不至于永远停在"已发送"
+            clearTimeout(sendWatchdog);
+            sendWatchdog = setTimeout(() => {
+                if (pendingSignalId !== message.id) return;
+                setStatus("豆包未响应，请检查豆包页面与绑定", "#ff3b30");
+            }, ACK_TIMEOUT_MS);
         }
 
         /**
-         * 监听豆包返回的答案，自动批量答题
-         * 采用【分页串行模式】，解决单页题目数量限制、懒加载问题
+         * 监听豆包回传的处理状态
          */
-        function listenAnswer() {
-            // 监听 cx_ai_result 数据变化（豆包返回答案）
-            GM_addValueChangeListener("cx_ai_result", (_, oldVal, val) => {
-                // 无新数据 / 数据未变化，直接返回
-                if (!val || val === oldVal) return;
-                // 分割标记，分离纯答案JSON
-                const [raw] = val.split("|_|");
-
-                try {
-                    // 解析答案数组
-                    const answers = JSON.parse(raw);
-                    setStatus(`总答案数：${answers.length}`, "#007aff");
-                    let currentIndex = 0; // 全局答案指针（记录处理到第几条答案）
-
-                    /**
-                     * 单页处理主逻辑
-                     * 一页一页处理题目，处理完自动翻页，适配分页/懒加载
-                     */
-                    function handlePage() {
-                        // 所有答案全部处理完成，结束流程
-                        if (currentIndex >= answers.length) {
-                            setStatus("全部题目处理完成", "#34c759");
-                            // 开启自动下一题则执行翻页
-                            if (autoNextCheckbox.checked) nextQuestion();
-                            return;
-                        }
-
-                        // 实时获取当前页面所有题目DOM
-                        const pageQues = getAllQuestions();
-                        const pageLen = pageQues.length;
-                        setStatus(`DOM题目:${pageLen} | 处理到:${currentIndex}`, "#007aff");
-
-                        // 当前页面无题目，终止
-                        if (pageLen === 0) {
-                            setStatus("【终止】页面无题目", "#ff3b30");
-                            return;
-                        }
-
-                        let pageIdx = 0; // 当前页面内的题目下标
-
-                        /**
-                         * 串行处理当前页每一道题
-                         * 一题执行完毕再执行下一题，防止队列阻塞
-                         */
-                        function handleOneInPage() {
-                            // 当前页面所有题目处理完毕 → 翻页
-                            if (pageIdx >= pageLen) {
-                                setStatus("正在切换下一页...", "#007aff");
-                                if (autoNextCheckbox.checked) {
-                                    nextQuestion();
-                                }
-                                // 翻页延迟1秒，等待新页面加载，再继续处理剩余答案
-                                setTimeout(handlePage, 1000);
-                                return;
-                            }
-
-                            const globalIdx = currentIndex; // 全局答案序号
-                            const localIdx = pageIdx;       // 本页题目序号
-                            const ans = answers[globalIdx]; // 当前答案
-                            const curQ = pageQues[localIdx]; // 当前题目DOM
-
-                            setStatus(`处理: 全局${globalIdx + 1} / 本页${localIdx + 1}`, "#007aff");
-
-                            // 单题超时兜底：2.5秒无响应则强制跳过，防止卡死
-                            const guard = setTimeout(() => {
-                                setStatus(`第${globalIdx + 1}题超时跳过`, "#ff9500");
-                                currentIndex++;
-                                pageIdx++;
-                                setTimeout(handleOneInPage, 800);
-                            }, 2500);
-
-                            // 延迟执行答题逻辑，给DOM缓冲时间
-                            setTimeout(() => {
-                                clearTimeout(guard); // 清除超时计时器
-                                try {
-                                    // 勾选【跳过已答】且题目已作答 → 直接跳过
-                                    if (skipFilled.checked && isQuestionAnswered(curQ)) {
-                                        setStatus(`第${globalIdx + 1}题已答,跳过`, "#34c759");
-                                    }
-                                    // 题目标记为拦截（手写/图片模糊/超纲）→ 跳过
-                                    else if (ans.intercept) {
-                                        setStatus(`第${globalIdx + 1}题忽略`, "#ff9500");
-                                    }
-                                    // 正常执行答题填充
-                                    else {
-                                        fillAns(ans, curQ);
-                                        setStatus(`第${globalIdx + 1}题填写成功`, "#34c759");
-                                    }
-                                } catch (e) {
-                                    setStatus(`报错 ${globalIdx + 1}题:${e.message}`, "#ff3b30");
-                                }
-                                // 下标自增，进入下一题
-                                currentIndex++;
-                                pageIdx++;
-                                setTimeout(handleOneInPage, 800);
-                            }, 200);
-                        }
-
-                        // 启动当前页面答题流程
-                        handleOneInPage();
-                    }
-
-                    // 整体开始执行
-                    handlePage();
-                } catch (e) {
-                    setStatus(`顶层异常`, "#ff3b30");
+        function listenAck() {
+            onValueChange("cx_ai_ack", val => {
+                if (!val || val.id !== pendingSignalId) return;
+                if (val.state === "received") {
+                    clearTimeout(sendWatchdog);
+                    setStatus("豆包已接收，解析中...", "#007aff");
+                } else if (val.state === "done") {
+                    clearTimeout(sendWatchdog);
+                } else if (val.state === "error") {
+                    clearTimeout(sendWatchdog);
+                    setStatus(`豆包端失败：${val.msg || "未知原因"}`, "#ff3b30");
                 }
             });
+        }
+
+        /**
+         * 监听豆包返回的答案并回填
+         * 作业页：整页发送、按下标批量回填，不再自动翻页
+         * 考试页：只回填当前可见题目，开关打开时自动点"下一题"（下一题仍需手动发送）
+         */
+        function listenAnswer() {
+            onValueChange("cx_ai_result", (val, oldVal) => {
+                // 无新数据 / 数据未变化，直接返回
+                if (!val || val === oldVal) return;
+
+                // 兼容两种载荷：{id, data} 对象，以及旧的 "JSON|_|唯一串" 字符串
+                let payload = val;
+                if (typeof val === "string") {
+                    const [raw] = val.split("|_|");
+                    payload = { id: "", data: raw };
+                }
+                // 过期答案：不是最近一次请求的应答就丢弃
+                if (payload.id && pendingSignalId && payload.id !== pendingSignalId) return;
+
+                let answers;
+                try {
+                    answers = normalizeAnswers(payload.data);
+                } catch (e) {
+                    setStatus("答案格式异常，已忽略", "#ff3b30");
+                    return;
+                }
+                if (!answers.length) {
+                    setStatus("未解析到答案", "#ff3b30");
+                    return;
+                }
+                setStatus(`总答案数：${answers.length}`, "#007aff");
+
+                // ---------- 作业页：整页回填，不做自动翻页 ----------
+                if (!isExam()) {
+                    const quesList = getAllQuestions();
+                    let delay = 0;
+
+                    answers.forEach((ans, idx) => {
+                        const currentQues = quesList[idx];
+                        if (!currentQues) return;
+
+                        setTimeout(() => {
+                            try {
+                                if (skipFilled.checked && isQuestionAnswered(currentQues)) {
+                                    setStatus(`第${idx + 1}题已作答，自动跳过`, "#34c759");
+                                    return;
+                                }
+                                if (ans.intercept) {
+                                    setStatus(`第${idx + 1}题无法作答，跳过`, "#ff9500");
+                                    return;
+                                }
+                                fillAns(ans, currentQues);
+                                setStatus(`第${idx + 1}题已填写`, "#007aff");
+                            } catch (e) {
+                                setStatus(`第${idx + 1}题填写失败，自动跳过`, "#ff3b30");
+                            }
+                        }, delay);
+                        delay += 600;
+                    });
+                    return;
+                }
+
+                // ---------- 考试页：只处理当前可见题 ----------
+                const curQ = getVisibleQuestion();
+                if (!curQ) {
+                    setStatus("未找到当前可见题目", "#ff3b30");
+                    return;
+                }
+                if (answers.length > 1) {
+                    setStatus(`收到 ${answers.length} 条，考试页仅用第 1 条`, "#ff9500");
+                }
+                const ans = answers[0];
+                if (skipFilled.checked && isQuestionAnswered(curQ)) {
+                    setStatus("当前题已作答，跳过", "#34c759");
+                } else if (ans.intercept) {
+                    setStatus("当前题无法作答，跳过", "#ff9500");
+                } else {
+                    try {
+                        fillAns(ans, curQ);
+                        setStatus("当前题已填写", "#34c759");
+                    } catch (e) {
+                        setStatus(`填写失败：${e.message}`, "#ff3b30");
+                        return;
+                    }
+                }
+                // 只有开关打开且确实翻页成功才继续，避免同一题被反复覆盖
+                if (autoNextCheckbox.checked) {
+                    setTimeout(() => {
+                        if (nextQuestion()) setStatus("已切到下一题", "#007aff");
+                    }, 1200);
+                }
+            });
+        }
+
+        /**
+         * 把豆包返回的答案统一成数组
+         * 兼容对象、数组、字符串三种形态（考试页单题常直接返回单个对象）
+         * @param {*} raw
+         * @returns {object[]}
+         */
+        function normalizeAnswers(raw) {
+            let parsed = raw;
+            if (typeof raw === "string") {
+                parsed = JSON.parse(raw);
+            }
+            const list = Array.isArray(parsed) ? parsed : [parsed];
+            return list.filter(item => item && typeof item === "object"
+                && (item.type !== undefined || item.intercept));
         }
 
         /**
@@ -604,9 +784,7 @@
 
                         // 双向兼容：AI给【显示字母】 或 AI给【真实data值】都能匹配
                         if (realData === target || showText === target) {
-                            // 点击外层容器（学习通真正绑定点击事件的元素）
-                            item.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
-                            item.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+                            // 只派发 click：学习通若同时绑了 mousedown 与 click，多发事件会把选项反选
                             item.click();
                             success = true;
                         }
@@ -617,13 +795,15 @@
             }
             // 题型 2填空 / 4简答 → 文本框/富文本编辑器赋值
             else if (["2", "4"].includes(type)) {
-                // 填空题：保留原有多空逻辑不变
+                // 填空题：按空顺序逐个填充，每个空的成功状态独立判断，避免前一个空掩盖后一个空失败
                 if (type === "2") {
                     const textareaList = block.querySelectorAll('textarea[name^="answerEditor"]');
+                    const failed = [];
                     // 按顺序遍历输入框和答案，一一对应填充
                     textareaList.forEach((ta, idx) => {
                         if (idx >= ansArr.length) return;
                         const content = ansArr[idx];
+                        let ok = false;
 
                         // 优先使用学习通UE富文本编辑器赋值
                         if (win.UE && win.UE.getEditor) {
@@ -633,27 +813,30 @@
                                     ed.setContent(content);
                                     ed.fireEvent?.("contentChange");
                                 });
-                                success = true;
+                                ok = true;
                             } catch (e) {
-                                success = false;
+                                ok = false;
                             }
                         }
                         // 富文本失败 → 使用contenteditable普通富文本
-                        if (!success) {
+                        if (!ok) {
                             const editDom = block.querySelector('[contenteditable="true"]');
                             if (editDom) {
                                 editDom.innerText = content;
                                 editDom.dispatchEvent(new Event("input", { bubbles: true }));
-                                success = true;
+                                ok = true;
                             }
                         }
                         // 最后兜底：原生textarea直接赋值
-                        if (!success && ta) {
+                        if (!ok && ta) {
                             ta.value = content;
                             ta.dispatchEvent(new Event("input", { bubbles: true }));
-                            success = true;
+                            ok = true;
                         }
+                        if (!ok) failed.push(idx + 1);
                     });
+                    if (failed.length) throw new Error(`第 ${failed.join("、")} 空赋值失败`);
+                    success = true;
                 }
                 // 简答题：type=4 全新修复逻辑
                 else if (type === "4") {
@@ -698,14 +881,25 @@
         }
 
         /**
-         * 自动点击【下一题 / 下一章】按钮
+         * 点击【下一题】
+         * 只在考试页生效；作业页整页发送后不翻页，避免误点"下一节/下一章"
+         * @returns {boolean} 是否找到并点击了按钮
          */
         function nextQuestion() {
+            if (!isExam()) return false;
             document.activeElement?.blur(); // 失焦当前输入框
-            // 匹配常规下一题按钮
-            const btn = document.querySelector(".nextBtn,.nextChapter")
-            || [...document.querySelectorAll("button,a")].find(el => /下一/.test(el.innerText));
-            btn?.click();
+
+            const pick = el => el && !el.disabled && !/下一(章|节)/.test(el.innerText || "");
+            const explicit = document.querySelector(".nextBtn");
+            if (pick(explicit)) {
+                explicit.click();
+                return true;
+            }
+            const btn = [...document.querySelectorAll("button,a")]
+                .find(el => pick(el) && /下一题|下一道|下一頁/.test(el.innerText || ""));
+            if (!btn) return false;
+            btn.click();
+            return true;
         }
     }
     // ===================== 学习通 答题端 逻辑结束 =====================
@@ -727,8 +921,25 @@
         let pollTimer;         // 轮询计时器（监听AI输出）
         let watchDog;          // 超时看门狗
         let statusDom;         // 状态文本容器
-        const presenceKey = `${DOUBAO_PRESENCE_PREFIX}${Date.now()}_${Math.random().toString(36).slice(2)}`;
-        const updatePresence = () => GM_setValue(presenceKey, { url: location.href, updatedAt: Date.now() });
+        let currentSignalId = ""; // 当前正在处理的信号 id，手动抓取时沿用
+
+        // 标签页标识：sessionStorage 同标签页内跨地址保留，换成 /chat/<id> 也不会变
+        let tabToken = "";
+        try { tabToken = sessionStorage.getItem("cx_doubao_tab_token") || ""; } catch (e) { }
+        if (!tabToken) {
+            tabToken = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+            try { sessionStorage.setItem("cx_doubao_tab_token", tabToken); } catch (e) { }
+        }
+
+        const presenceKey = `${DOUBAO_PRESENCE_PREFIX}${tabToken}`;
+        const updatePresence = () => {
+            GM_setValue(presenceKey, { token: tabToken, url: location.href, updatedAt: Date.now() });
+            // 绑定在这个标签页时，同步更新"打开豆包"用的地址，避免地址变化后开到旧会话
+            if (GM_getValue("cx_doubao_target", "") === tabToken
+                && GM_getValue("cx_doubao_url", "") !== location.href) {
+                GM_setValue("cx_doubao_url", location.href);
+            }
+        };
         updatePresence();
         const presenceTimer = setInterval(updatePresence, 5000);
         window.addEventListener("pagehide", () => {
@@ -804,25 +1015,29 @@
             };
             const bindingDom = document.getElementById("bind-status");
             const refreshBindingStatus = () => {
-                const savedUrl = GM_getValue("cx_exclusive_url", "");
-                bindingDom.textContent = savedUrl
-                    ? (savedUrl === location.href ? "已绑定此页" : "绑定在其他页")
-                    : "未绑定";
+                const target = GM_getValue("cx_doubao_target", "");
+                if (!target) {
+                    bindingDom.textContent = "未绑定（任意豆包页可接手）";
+                } else {
+                    bindingDom.textContent = target === tabToken ? "已绑定此标签页" : "绑定在其他标签页";
+                }
             };
             refreshBindingStatus();
-            // 允许在任意豆包页覆盖失效的旧绑定。
+            // 绑定的是"这个标签页"，豆包换会话地址不影响后续接收
             document.getElementById("bindBtn").onclick = () => {
-                GM_setValue("cx_exclusive_url", location.href);
+                GM_setValue("cx_doubao_target", tabToken);
+                GM_setValue("cx_doubao_url", location.href);
                 refreshBindingStatus();
-                setSta("已绑定当前页", "#34c759");
+                setSta("已绑定当前标签页", "#34c759");
             };
             document.getElementById("unbindBtn").onclick = () => {
-                GM_setValue("cx_exclusive_url", "");
+                GM_setValue("cx_doubao_target", "");
+                GM_setValue("cx_doubao_url", "");
                 refreshBindingStatus();
                 setSta("已清除绑定");
             };
             // 手动抓取答案按钮
-            document.getElementById('catch-btn').onclick = doCatchAnswer;
+            document.getElementById('catch-btn').onclick = () => doCatchAnswer();
         }
         /**
          * 修改豆包端状态文字与颜色
@@ -849,24 +1064,54 @@
          * @returns {boolean} 是否写入成功
          */
         function writeText(el, txt) {
-            if(!el) return false;
-            // 获取焦点
+            if (!el) return false;
             el.focus();
-            // 清空原有内容
-            el.innerHTML = '';
-            // 写入纯文本
-            el.innerText = txt;
-            // 将光标移动到文本末尾（Tiptap必须，否则发送按钮大概率灰掉不可点击）
+
+            // 方案1：走原生插入命令，ProseMirror 会把它当成真实输入，换行也会变成段落
+            try {
+                const sel = window.getSelection();
+                const range = document.createRange();
+                range.selectNodeContents(el);
+                sel.removeAllRanges();
+                sel.addRange(range);
+                if (document.execCommand("insertText", false, txt) && el.innerText.trim()) {
+                    moveCaretToEnd(el);
+                    el.dispatchEvent(new Event("input", { bubbles: true }));
+                    return true;
+                }
+            } catch (e) { }
+
+            // 方案2：按段落写入，保留原有换行语义
+            el.innerHTML = txt.split("\n")
+                .map(line => `<p>${escapeHtml(line) || "<br>"}</p>`)
+                .join("");
+            moveCaretToEnd(el);
+            // 派发输入事件通知编辑器内容变更
+            el.dispatchEvent(new Event("input", { bubbles: true }));
+            el.dispatchEvent(new Event("change", { bubbles: true }));
+            return !!el.innerText.trim();
+        }
+
+        /**
+         * 光标移到内容末尾（Tiptap 必须，否则发送按钮大概率灰掉不可点击）
+         */
+        function moveCaretToEnd(el) {
             const range = document.createRange();
             const sel = window.getSelection();
             range.selectNodeContents(el);
             range.collapse(false);
             sel.removeAllRanges();
             sel.addRange(range);
-            // 派发输入事件通知编辑器内容变更
-            el.dispatchEvent(new Event("input", { bubbles: true }));
-            el.dispatchEvent(new Event("change", { bubbles: true }));
-            return true;
+        }
+
+        /**
+         * HTML 转义，避免题目里的尖括号被当成标签
+         */
+        function escapeHtml(str) {
+            return String(str)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;");
         }
         /**
          * 获取新版豆包发送按钮（纸飞机图标按钮）
@@ -874,6 +1119,7 @@
          */
         function getSendBtn() {
             return document.querySelector('button[aria-label="send"]')
+            || document.querySelector('button[aria-label="发送"]')
             || document.getElementById("flow-end-msg-send");
         }
         /**
@@ -883,39 +1129,56 @@
             const receiveSignal = val => {
                 if (!val) return;
                 try {
-                    const data = JSON.parse(val);
-                    const bindUrl = GM_getValue("cx_exclusive_url", "");
-                    if (bindUrl && bindUrl !== location.href) return;
-                    if (!data.id || GM_getValue("cx_ai_signal_consumed", "") === data.id) return;
-                    GM_setValue("cx_ai_signal_consumed", data.id);
+                    const data = typeof val === "string" ? JSON.parse(val) : val;
+                    if (!data.id) return;
+                    // 大体一致：有绑定就只认绑定的标签页，没绑定任何豆包页都能接手
+                    const target = GM_getValue("cx_doubao_target", "");
+                    if (target && target !== tabToken) return;
+                    const consumed = GM_getValue("cx_ai_signal_consumed", null);
+                    if (consumed && consumed.id === data.id && Date.now() - (consumed.at || 0) < SIGNAL_FRESH_MS) return;
+                    GM_setValue("cx_ai_signal_consumed", { id: data.id, at: Date.now(), token: tabToken });
                     handleMsg(data);
                 } catch (e) { }
             };
-            GM_addValueChangeListener("cx_ai_signal", (_, __, val) => receiveSignal(val));
+            onValueChange("cx_ai_signal", val => receiveSignal(val));
 
             // 新打开的豆包页接收刚才触发自动打开的消息，忽略过期或已处理消息。
             const pending = GM_getValue("cx_ai_signal", "");
             try {
-                const data = JSON.parse(pending);
-                if (data.id && Date.now() - data.ts < 90000) receiveSignal(pending);
+                const data = typeof pending === "string" ? JSON.parse(pending) : pending;
+                if (data && data.id && Date.now() - data.ts < SIGNAL_FRESH_MS) receiveSignal(data);
             } catch (e) { }
         }
+        /**
+         * 回写处理状态，让学习通端能区分"已收到/已完成/失败"
+         */
+        function ack(id, state, msg = "") {
+            if (!id) return;
+            GM_setValue("cx_ai_ack", { id, state, msg, ts: Date.now() });
+        }
+
         /**
          * 处理学习通发来的指令：初始化规则 / 文字题目 / 图片题目
          * @param {object} data 指令对象
          */
         async function handleMsg(data) {
+            const signalId = data.id || "";
+            currentSignalId = signalId;
             isWait = true;
+            ack(signalId, "received");
             // 全局60秒超时，防止无限等待
+            clearTimeout(watchDog);
             watchDog = setTimeout(() => {
                 isWait = false;
                 clearInterval(pollTimer);
                 setSta("超时重置", "#ff3b30");
+                ack(signalId, "error", "等待 AI 回复超时");
             }, 60000);
             const input = getInputBox();
             if (!input) {
                 isWait = false;
                 setSta("无输入框", "#ff3b30");
+                ack(signalId, "error", "未找到豆包输入框");
                 return;
             }
             let ok = false;
@@ -958,25 +1221,38 @@
                     const arr = [...buf].map(c => c.charCodeAt(0));
                     // 构建图片File对象
                     const file = new File([new Uint8Array(arr)], "q.png", { type: "image/png" });
-                    // 1. 找到加号下拉按钮（aria-haspopup="menu"的加号按钮）
-                    const plusBtn = document.querySelector('button[aria-haspopup="menu"] svg path[d*="M12.0005 2.25"]')?.closest("button");
+                    // 1. 找到加号下拉按钮，固定 SVG path 只是首选，失败时按 aria-label 与 aria-haspopup 兜底
+                    const plusBtn = document.querySelector('button[aria-haspopup="menu"] svg path[d*="M12.0005 2.25"]')?.closest("button")
+                        || [...document.querySelectorAll('button[aria-haspopup="menu"]')]
+                            .find(b => /上传|附件|upload|attach/i.test(b.getAttribute("aria-label") || ""))
+                        || document.querySelector('button[aria-haspopup="menu"]');
                     if (!plusBtn) {
                         setSta("找不到加号按钮", "#ff3b30");
+                        ack(signalId, "error", "未找到加号按钮，豆包界面可能已改版");
+                        isWait = false;
                         return;
                     }
                     // 点击加号，打开下拉菜单，渲染隐藏file input
                     plusBtn.click();
-                    // 等待菜单DOM渲染完成，改成轮询
-                    await new Promise(resolve => {
+                    // 等待菜单DOM渲染完成，轮询带 8 秒超时，避免永久挂起
+                    const fileInput = await new Promise(resolve => {
+                        const start = Date.now();
                         const poll = setInterval(() => {
-                            const fi = document.querySelector('input[type="file"][multiple]');
-                            if(fi){ clearInterval(poll); resolve(true); }
-                        },100)
-                        });
-                    // 2. 获取隐藏的file input
-                    const fileInput = document.querySelector('input[type="file"][multiple]');
+                            const fi = document.querySelector('input[type="file"][multiple]')
+                                || document.querySelector('input[type="file"]');
+                            if (fi) {
+                                clearInterval(poll);
+                                resolve(fi);
+                            } else if (Date.now() - start > 8000) {
+                                clearInterval(poll);
+                                resolve(null);
+                            }
+                        }, 100);
+                    });
                     if (!fileInput) {
                         setSta("未找到文件上传input", "#ff3b30");
+                        ack(signalId, "error", "上传菜单未出现");
+                        isWait = false;
                         return;
                     }
                     // 构造DataTransfer装入图片
@@ -987,22 +1263,23 @@
                     fileInput.dispatchEvent(new Event("change", { bubbles: true }));
 
                     // =========轮询等待图片全部上传完毕=========
-                    await new Promise((resolve, reject) => {
+                    await new Promise(resolve => {
                         const start = Date.now();
                         const timer = setInterval(() => {
                             const uploading = document.querySelectorAll('[data-uploading="true"]');
                             const timeout = Date.now() - start > 6000;
                             if (uploading.length === 0 || timeout) {
                                 clearInterval(timer);
-                                if(timeout) setSta("图片上传超时，尝试发送");
+                                if (timeout) setSta("图片上传超时，尝试发送");
                                 resolve(true);
                             }
                         }, 200);
-                    })
+                    });
                     ok = true; // 所有图片就绪后，才标记ok
                 } catch (e) {
                     console.error("图片上传异常", e);
                     setSta("图片处理异常", "#ff3b30");
+                    ack(signalId, "error", "图片处理异常");
                 }
                 // 图片分支单独处理发送，不再走外层的ok判断！
                 if(ok){
@@ -1012,15 +1289,18 @@
                         // 改用MouseEvent派发事件适配radix按钮
                         const clickEvt = new MouseEvent("click", {bubbles:true,cancelable:true});
                         sendBtn.dispatchEvent(clickEvt);
+                        ack(signalId, "done");
                         setSta("解析中...");
-                        startCatch();
+                        startCatch(signalId);
                     } else {
                         isWait = false;
                         setSta("发送失败", "#ff3b30");
+                        ack(signalId, "error", "未找到发送按钮");
                     }
                 }else{
                     isWait = false;
                     setSta("录入失败", "#ff3b30");
+                    ack(signalId, "error", "图片录入失败");
                 }
                 return;
             }
@@ -1036,6 +1316,7 @@
             if (!ok) {
                 isWait = false;
                 setSta("录入失败", "#ff3b30");
+                ack(signalId, "error", "题目文字写入失败");
                 return;
             }
             // 延迟点击发送，模拟人工操作
@@ -1044,87 +1325,133 @@
                 if (sendBtn) {
                     sendBtn.disabled = false;
                     sendBtn.click();
+                    ack(signalId, "done");
                     setSta("解析中...");
                     // 启动轮询，等待AI输出答案
-                    startCatch();
+                    startCatch(signalId);
                 } else {
                     isWait = false;
                     setSta("发送失败", "#ff3b30");
+                    ack(signalId, "error", "未找到发送按钮");
                 }
             }, 1500);
         }
         /**
          * 手动抓取AI答案，并回传给学习通
+         * @param {string} signalId 对应的信号 id，回传时带上便于学习通端配对
          * @returns {boolean} 抓取是否成功
          */
-        function doCatchAnswer() {
-            const bindUrl = GM_getValue("cx_exclusive_url", "");
-            if (bindUrl && bindUrl !== location.href) {
-                setSta("请先在设置中绑定当前页", "#ff3b30");
+        function doCatchAnswer(signalId = currentSignalId) {
+            const target = GM_getValue("cx_doubao_target", "");
+            if (target && target !== tabToken) {
+                setSta("请先在设置中绑定当前标签页", "#ff3b30");
                 return false;
             }
             setSta("抓取中...", "#ff9500");
-            const allMessages = document.querySelectorAll('div[data-message-id]');
-            if (!allMessages.length) {
+            const texts = recentMessageTexts();
+            if (!texts.length) {
                 setTimeout(() => setSta("未找见消息", "#ff3b30"), 400);
                 return false;
             }
-            // 取最后一条消息（AI最新回复）
-            const latestMsg = allMessages[allMessages.length - 1];
-            if (!latestMsg) {
-                setTimeout(() => setSta("无最新消息", "#ff3b30"), 400);
-                return false;
+            if (deliverAnswer(texts, signalId)) return true;
+            setTimeout(() => setSta("未找到有效JSON", "#ff3b30"), 400);
+            return false;
+        }
+
+        /**
+         * 最新一条消息文本
+         * 只取最后一条：AI 尚未回复时最后一条是本条提问，不能回退到上一条旧答案
+         * @returns {string[]} 最多一个元素的数组
+         */
+        function recentMessageTexts() {
+            const nodes = [...document.querySelectorAll('div[data-message-id]')];
+            const last = nodes[nodes.length - 1];
+            const txt = last ? last.innerText.trim() : "";
+            return txt ? [txt] : [];
+        }
+
+        /**
+         * 从一段文本里提取最可能的答案 JSON
+         * 用括号配平定位，而不是贪婪正则，避免跨段拼出非法 JSON
+         * @param {string} text 消息文本
+         * @returns {string} 合法的 JSON 字符串，找不到返回空串
+         */
+        function extractAnswerJson(text) {
+            let best = "";
+            for (let i = 0; i < text.length; i++) {
+                const ch = text[i];
+                if (ch !== "[" && ch !== "{") continue;
+                let depth = 0, inStr = false, esc = false, end = -1;
+                for (let j = i; j < text.length; j++) {
+                    const c = text[j];
+                    if (inStr) {
+                        if (esc) esc = false;
+                        else if (c === "\\") esc = true;
+                        else if (c === '"') inStr = false;
+                        continue;
+                    }
+                    if (c === '"') { inStr = true; continue; }
+                    if (c === "[" || c === "{") depth++;
+                    else if (c === "]" || c === "}") {
+                        depth--;
+                        if (depth === 0) { end = j; break; }
+                    }
+                }
+                if (end < 0) continue;
+                const candidate = text.slice(i, end + 1);
+                try {
+                    const value = JSON.parse(candidate);
+                    const list = Array.isArray(value) ? value : [value];
+                    if (!list.length) continue;
+                    const valid = list.every(item => item && typeof item === "object"
+                        && (item.type !== undefined || item.intercept));
+                    if (valid && candidate.length > best.length) best = candidate;
+                } catch (e) { }
             }
-            const nowTxt = latestMsg.innerText.trim();
-            // 正则提取所有JSON片段
-            let resStr = "";
-            // 优先抓取完整数组
-            const fullArr = nowTxt.match(/\[[\s\S]*\]/);
-            if (fullArr) {
-                resStr = fullArr[0];
-            } else {
-                // 没找到外层[]，沿用原来拆分单对象逻辑，兼容零散{}
-                const jsArr = nowTxt.match(/\{[^{}]*\}/g)?.filter(v => v.includes('"type"') || v.includes('"intercept"')) || [];
-                resStr = `[${jsArr.join(",")}]`;
-            }
-            try {
-                JSON.parse(resStr); // 校验JSON合法性
-                const unique = Date.now() + "_" + Math.random();
-                // 把答案回传给学习通
-                GM_setValue("cx_ai_result", resStr + "|_|" + unique);
+            return best;
+        }
+
+        /**
+         * 把提取到的答案回传学习通
+         * @returns {boolean} 是否回传成功
+         */
+        function deliverAnswer(texts, signalId) {
+            for (const txt of texts) {
+                const resStr = extractAnswerJson(txt);
+                if (!resStr) continue;
+                GM_setValue("cx_ai_result", { id: signalId || "", data: resStr, ts: Date.now() });
                 isWait = false;
                 clearInterval(pollTimer);
                 clearTimeout(watchDog);
-                setTimeout(() => setSta("已传答案", "#34c759"), 500);
+                setSta("已传答案", "#34c759");
+                ack(signalId, "done");
                 return true;
-            } catch (e) {
-                setTimeout(() => setSta("格式错误", "#ff3b30"), 400);
-                return false;
             }
+            return false;
         }
+
         /**
          * 自动轮询监听AI输出，稳定后自动抓取答案
+         * 解析失败不终止轮询，直到看门狗超时，避免长答案被截断后直接判死
          */
-        function startCatch() {
+        function startCatch(signalId = currentSignalId) {
             clearInterval(pollTimer);
             let lastTxt = "";
-            let stable = 0; // 内容稳定计数器
+            let stable = 0;   // 内容稳定计数器
+            let attempted = ""; // 已经尝试解析过的内容，避免对同一份内容反复重试
             // 每400毫秒轮询一次消息
             pollTimer = setInterval(() => {
-                const allMessages = document.querySelectorAll('div[data-message-id]');
-                if (!allMessages.length) return;
-                const latestMsg = allMessages[allMessages.length - 1];
-                if (!latestMsg) return;
-                const nowTxt = latestMsg.innerText.trim();
+                const texts = recentMessageTexts();
+                if (!texts.length) return;
+                const nowTxt = texts[0];
                 // 内容连续不变 → 判断AI输出完成
-                if (nowTxt === lastTxt && nowTxt) {
+                if (nowTxt === lastTxt) {
                     stable++;
-                    // 连续9次不变 = 输出结束，开始抓取
-                    if (stable >= 9) {
-                        clearInterval(pollTimer);
-                        clearTimeout(watchDog);
-                        isWait = false;
-                        doCatchAnswer();
+                    if (stable >= 4 && nowTxt !== attempted) {
+                        attempted = nowTxt;
+                        if (!deliverAnswer(texts, signalId)) {
+                            setSta("等待完整 JSON...", "#ff9500");
+                        }
                     }
                 } else {
                     stable = 0;

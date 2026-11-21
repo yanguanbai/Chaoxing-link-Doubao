@@ -1,6 +1,6 @@
 # Chaoxing Plain-text Paste Helper
 
-Current version: `1.2.1` · Author: Bart · [中文](README.md)
+Current version: `1.2.2` · Author: Bart · [中文](README.md)
 
 A paste helper for the short-answer editors on Chaoxing pages. Image pastes are left untouched; text-only pastes are converted to plain text with line breaks preserved.
 

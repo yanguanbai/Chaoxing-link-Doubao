@@ -10,10 +10,28 @@
 
 ## 主脚本 `chaoxing-doubao.user.js`
 
+### 1.6.3
+
+- 跨页面绑定改为按标签页识别（`sessionStorage` token）：豆包从首页跳到 `/chat/<id>` 后绑定仍然有效，不再出现第二题起信号被丢弃、每发一次就多开一个豆包标签的问题。
+- 心跳阈值放宽到 120 秒，兼容后台标签定时器被节流；只有绑定的那个标签页会被判定为可用。
+- 信号改为对象载荷并带上目标标签页与消息 id；新增处理状态回传（已接收 / 已完成 / 失败 / 超时），学习通端不再永远停在“已发送”。
+- 答案回传带请求 id，过期答案直接丢弃；同时兼容旧的 `JSON|_|唯一串` 格式。
+- 新增 `GM_addValueChangeListener` 降级轮询，非 Tampermonkey 的脚本管理器也能通信。
+- 作业页：整页发送后不再自动翻页，`自动下一题` 开关在作业页隐藏，仅考试页显示并生效；同时避免误点“下一章/下一节”。
+- 作业页取题改为逐题拼装题干与选项，题量、满分、作答时间、答题卡等页面噪音不再发送；截图只渲染题目块。
+- 考试页只回填当前可见题目，单对象答案自动规范成数组，修复答案被反复覆盖的循环。
+- 豆包侧：答案提取改为括号配平，替换贪婪正则；解析失败继续轮询到 60 秒超时，不再一次失败就判死。
+- 图片上传的菜单轮询加 8 秒超时，加号按钮增加选择器兜底。
+- 写入豆包输入框优先走原生插入命令，保留多行规则；选项作答只派发 `click`，避免被反选。
+- 填空题每个空独立判定成功，任一空失败会明确报错而不是静默留空；简答“已答”判读统一使用页面真实 `window`。
+- 悬浮面板拖拽时清理 `right`/`bottom`，不会再被拉伸成整行宽；吸附位置同时保存 `top`。
+- 路由监听改为 300ms 地址轮询，替换整棵 DOM 的 MutationObserver。
+- 修复考试页 / 作业页在同一窗口切换时“自动下一题”显示状态不同步。
+
 ### 1.6.2
 
 - 发布整理：脚本改名为标准 `.user.js` 形式，`@downloadURL` / `@updateURL` 统一指向 GitHub 仓库。
-- 新增安装首页 `index.html`、MIT 许可证与第三方依赖声明。
+- 补 MIT 许可证与第三方依赖声明。
 
 ### 1.6.1
 
@@ -37,6 +55,11 @@
 
 ## 粘贴助手 `chaoxing-paste-helper.user.js`
 
+### 1.2.2
+
+- 文本先做 HTML 转义再换行，题干里的 `<`、`&` 不会再被 UEditor 当成标签解析。
+- 注入轮询改为前 30 秒每秒一次、之后 5 秒一次，兼顾切题时新建的编辑器实例。
+
 ### 1.2.1
 
 - 随主脚本一起整理发布元数据：补 `@license`、`@homepageURL`、`@supportURL`、`@downloadURL`、`@updateURL`。
@@ -54,7 +77,7 @@
 
 - 仓库结构重建：脚本移入 `src/<脚本名>/`，每个脚本配中英两份 README；根目录对齐同账号的脚本仓库结构（`README.md`、`README.en.md`、`DISTRIBUTION.md`、`LICENSE`、`.gitignore`、`CHANGELOG.md`）。`@downloadURL` / `@updateURL` 与所有 raw 安装链接同步改到 `src/` 路径。
 - 文档补 `[!IMPORTANT]` 警示块：明确纯文本粘贴助手是必须单独安装的第二个脚本，只装主脚本时简答题无法正常录入、整体不能正常使用；根 README 中英、两个脚本 README 中英同步。
-- 引入 CI 与配套工具，`ci.yml` 在 Node 20/22 上跑语法检查、脚本元数据检查、README 版本列校验与文档链接校验；`tools/sync-readme-versions.mjs` 用 `@version` 回填根 README 版本列，`tools/check-docs.mjs` 校验 raw 安装链接与更新地址。
+- 引入 CI 与配套工具，`ci.yml` 在 Node 22/24 上跑语法检查、脚本元数据检查、README 版本列校验与文档链接校验；`tools/sync-readme-versions.mjs` 用 `@version` 回填根 README 版本列，`tools/check-docs.mjs` 校验 raw 安装链接与更新地址。
 - 补英文文档：根目录 `README.en.md`，两个脚本各配 `README.en.md`，与中文版章节一一对应。
 - 移除安装首页 `index.html`，安装入口统一放在根 README 表格的 raw 链接，避免两处链接各自失效。
 - `THIRD-PARTY-NOTICES.md` 并入 `DISTRIBUTION.md`，改为记录发行来源核对、外部依赖与许可证范围。

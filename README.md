@@ -10,16 +10,16 @@ English version: [README.en.md](README.en.md)
 
 | 脚本 | 用途 | 版本 | 文档与安装 |
 |---|---|---:|---|
-| 学习通豆包助手 | 取当前题目、发送文字或截图、抓取回复、回填答案、页面绑定 | 1.6.2 | [中文](src/chaoxing-doubao/README.md) · [English](src/chaoxing-doubao/README.en.md) · [安装](https://raw.githubusercontent.com/yanguanbai/Chaoxing-link-Doubao/main/src/chaoxing-doubao/chaoxing-doubao.user.js) |
-| 纯文本粘贴助手 | 简答题编辑器只粘纯文本，图片仍按原生粘贴 | 1.2.1 | [中文](src/chaoxing-paste-helper/README.md) · [English](src/chaoxing-paste-helper/README.en.md) · [安装](https://raw.githubusercontent.com/yanguanbai/Chaoxing-link-Doubao/main/src/chaoxing-paste-helper/chaoxing-paste-helper.user.js) |
+| 学习通豆包助手 | 取当前题目、发送文字或截图、抓取回复、回填答案、页面绑定 | 1.6.3 | [中文](src/chaoxing-doubao/README.md) · [English](src/chaoxing-doubao/README.en.md) · [安装](https://raw.githubusercontent.com/yanguanbai/Chaoxing-link-Doubao/main/src/chaoxing-doubao/chaoxing-doubao.user.js) |
+| 纯文本粘贴助手 | 简答题编辑器只粘纯文本，图片仍按原生粘贴 | 1.2.2 | [中文](src/chaoxing-paste-helper/README.md) · [English](src/chaoxing-paste-helper/README.en.md) · [安装](https://raw.githubusercontent.com/yanguanbai/Chaoxing-link-Doubao/main/src/chaoxing-paste-helper/chaoxing-paste-helper.user.js) |
 
 两个脚本是两份独立文件，脚本列表里会各占一条记录。主脚本不含粘贴助手逻辑，粘贴助手也不随主脚本安装。
 
 ## 前置依赖
 
 > [!IMPORTANT]
-> **必须安装 Disable Content-Security-Policy 扩展，它负责连通学习通与豆包两个页面。**
-> 学习通页面带 CSP 限制，脚本在学习通与豆包之间传递题目、截图和答案是靠这条链路完成的；不装或没启用时，截图会被直接拦下，跨页面数据也可能被阻断，脚本无法正常工作。装完后**点一下扩展图标确认已启用**（按标签页生效，刷新页面后仍要保持启用态）。
+> **需要截图功能时必须安装并启用 Disable Content-Security-Policy 扩展。**
+> 学习通页面带 CSP 限制，会拦下脚本从 jsDelivr 加载的 `html2canvas` 以及画布导出，所以不装扩展时**只有截图会失败，文字发送不受影响**。跨页面传递题目与答案用的是脚本管理器的本地存储，和 CSP 无关。装完后**点一下扩展图标确认已启用**（按标签页生效，刷新页面后仍要保持启用态）。
 > 入口：[Chrome 版](https://chrome.google.com/webstore/detail/disable-content-security/ieelmcmcagommplceebfedjlakkhpden) ｜ [另一作者版，含 .crx](https://github.com/WithoutHair/Disable-Content-Security-Policy)
 
 > [!IMPORTANT]
@@ -33,7 +33,7 @@ English version: [README.en.md](README.en.md)
 
 1. 安装并启用 Tampermonkey，允许它在网页上运行脚本；需要截图时再装上面的 CSP 扩展。
 2. 点击上表对应脚本的“安装”链接，在扩展弹出的安装页确认。两个脚本各点一次。
-3. 刷新学习通答题页面（`mooc-ans` 或 `exam-ans`），右下角出现答题面板即安装完成。
+3. 刷新学习通答题页面（`mooc-ans` 或 `exam-ans`），页面左侧出现可拖动的答题面板即安装完成。
 
 安装确认需要你在浏览器里点一次；网页无法静默安装扩展或脚本。手动安装：脚本面板“添加新脚本”→ 粘贴 `src/` 下对应文件全文 → 保存。
 
