@@ -158,15 +158,15 @@
     }
 
     /**
-     * 按需打开豆包页，已有页面时一律不重复打开
-     * @param {boolean} force 用户明确要求强制新开（需连续两次点击才走到这里）
+     * 发送流程里按需打开豆包页：已有页面时一律不重复打开
+     * 手动按钮不走这里——用户点按钮就是要开，直接开。
      * @returns {'active'|'maybe'|'cooldown'|'opened'} 处理结果
      */
-    function openDoubaoIfNeeded(force = false) {
+    function openDoubaoIfNeeded() {
         const { fresh, dormant, tabCount, boundRecently } = getDoubaoPresence();
         if (fresh) return "active";
         // 有停跳记录、近期通信过、或近期绑定过：页面可能只是被冻结，绝不能当成"没开"再去开一个
-        if (!force && (dormant || tabCount > 0 || boundRecently)) return "maybe";
+        if (dormant || tabCount > 0 || boundRecently) return "maybe";
 
         const now = Date.now();
         const lastOpen = GM_getValue("cx_doubao_last_open", 0);
@@ -392,22 +392,17 @@
                 GM_setValue("cx_ai_result", ""); // 清空旧答案
                 sendSignal({ type: "init" }, "规则已发送");     // 发送【初始化规则】指令到豆包
             };
-            let forceOpenArmedAt = 0; // 记录"再点一次就强制开"的时刻
+            // 手动点「打开豆包」= 用户明确表示现在没开，直接开，不再自作聪明判断"可能还开着"
+            let lastManualOpen = 0;
             document.getElementById('btn-open-doubao').onclick = () => {
-                const armed = Date.now() - forceOpenArmedAt < 3000;
-                const openState = openDoubaoIfNeeded(armed);
-                if (openState === "opened") {
-                    forceOpenArmedAt = 0;
-                    setStatus("正在打开豆包...", "#007aff");
-                } else if (openState === "cooldown") {
-                    setStatus("刚打开过豆包，稍后再试", "#ff9500");
-                } else if (openState === "maybe") {
-                    forceOpenArmedAt = Date.now();
-                    setStatus("豆包页可能还开着，先切过去看看；确定关了再点一次强制新开", "#ff9500");
-                } else {
-                    forceOpenArmedAt = 0;
-                    setStatus("豆包页面已打开", "#34c759");
-                }
+                const now = Date.now();
+                if (now - lastManualOpen < 2000) return; // 防手抖连点开两个
+                lastManualOpen = now;
+                GM_setValue("cx_doubao_last_open", now);
+                // 标记"这一页是用户主动开的"，新页面加载后直接接管绑定
+                GM_setValue("cx_doubao_open_intent", now);
+                GM_openInTab(getDoubaoUrl(), { active: true, insert: true, setParent: true });
+                setStatus("正在打开豆包...", "#007aff");
             };
             document.getElementById('btn-send-txt').onclick = () => sendText();  // 发送文字题目
             document.getElementById('btn-send-img').onclick = () => sendImg();    // 发送截图题目
@@ -1084,7 +1079,14 @@
         try {
             const target0 = GM_getValue("cx_doubao_target", "");
             const chatIdNow = getChatId();
-            if (!target0) {
+            // 刚从学习通点「打开豆包」开出来的页面：它就是要用的那一页，直接接管
+            const openIntent = GM_getValue("cx_doubao_open_intent", 0);
+            if (openIntent && Date.now() - openIntent < 15000 && target0 !== tabToken) {
+                GM_deleteValue("cx_doubao_open_intent");
+                claimBinding();
+                autoClaimed = true;
+                bindingNotice = "已自动绑定当前页面";
+            } else if (!target0) {
                 // 没绑过：直接在加载时认这一页，首页（无对话号）也算，不用手动绑
                 claimBinding();
                 autoClaimed = true;
