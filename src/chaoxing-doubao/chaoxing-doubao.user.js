@@ -1171,13 +1171,14 @@
                 .db-btn-primary:hover { background: #0066d6; }
                 .db-settings { position: relative; }
                 .db-settings-menu {
-                    position: absolute; right: 0; bottom: calc(100% + 10px); width: 210px;
+                    position: absolute; right: 0; bottom: calc(100% + 10px); width: 240px;
                     padding: 12px; background: white; border: 1px solid #e5e5e5;
                     border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,0.14);
                     display: flex; flex-direction: column; gap: 8px; cursor: default;
                 }
                 .db-settings-menu[hidden] { display: none; }
                 .db-settings-menu .db-btn { width: 100%; }
+                .db-settings-menu #bind-status { line-height: 1.4; white-space: normal; word-break: break-all; }
             `;
             document.head.appendChild(style);
             const p = document.createElement("div");
@@ -1210,11 +1211,11 @@
             const refreshBindingStatus = () => {
                 const target = GM_getValue("cx_doubao_target", "");
                 const chatId = GM_getValue("cx_doubao_chat_id", "");
-                const suffix = chatId ? ` #${chatId.slice(0, 8)}` : "";
+                const suffix = chatId ? ` #${chatId}` : "";
                 if (!target) {
                     bindingDom.textContent = "未绑定（识别到会话后自动绑定）";
                 } else if (target === tabToken) {
-                    bindingDom.textContent = `已绑定此会话${suffix}（长期沿用）`;
+                    bindingDom.textContent = `已绑定此会话${suffix}`;
                 } else {
                     bindingDom.textContent = `其他豆包页持有绑定${suffix}`;
                 }
