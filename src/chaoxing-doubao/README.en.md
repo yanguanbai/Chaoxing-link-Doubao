@@ -1,6 +1,6 @@
 # Chaoxing Doubao Helper
 
-Current version: `1.6.3` · Author: Bart · [中文](README.md)
+Current version: `1.6.5` · Author: Bart · [中文](README.md)
 
 Extracts the current question from a Chaoxing answer page, hands it to the Doubao web chat for assistance, and writes the result back into the page. The script runs on both sides: the Chaoxing page handles extraction and filling, the Doubao page handles the chat and hands the reply back, and the two halves talk through the userscript manager's cross-tab storage.
 
@@ -35,7 +35,7 @@ Extracts the current question from a Chaoxing answer page, hands it to the Douba
 
 1. Open Doubao and sign in, go to the conversation you want to use, and click "bind this page" on the Doubao panel; the status turns green when bound.
 2. Open the Chaoxing answer page and click the rule initialiser.
-3. Send text or a screenshot depending on the question. If Doubao is not open, the message is stored first and the page is opened.
+3. Send text or a screenshot depending on the question. With no binding record the send is blocked; if the Doubao page is closed, open it from the panel and bind this page there before sending.
 4. The reply is fetched automatically, or manually from the Doubao panel.
 5. On homework pages the whole page is sent once and filled in one pass. On exam pages one question is sent at a time; turn on `auto next question` to move on automatically.
 
