@@ -1008,26 +1008,26 @@
                 if (GM_getValue("cx_doubao_url", "") !== location.href) GM_setValue("cx_doubao_url", location.href);
                 if (chatId && GM_getValue("cx_doubao_chat_id", "") !== chatId) GM_setValue("cx_doubao_chat_id", chatId);
             }
-            visibleTicks = document.visibilityState === "visible" && chatId ? visibleTicks + 1 : 0;
+            visibleTicks = document.visibilityState === "visible" ? visibleTicks + 1 : 0;
             autoClaimTick(chatId);
         };
 
         /**
          * 自动绑定/接管判断，每 5 秒跑一次
-         * 规则：没绑过 → 读到对话号就认；绑到别的标签页但本页在前面且连续 10 秒可读对话号 → 本页接管
-         * @param {string} chatId 当前地址里的对话号
+         * 规则：没绑过 → 直接认这一页（首页没有对话号也认）；原绑定页已死 → 接手；
+         *      原绑定页活着但本页在前面且它已不再活跃 → 本页让位接管
+         * @param {string} chatId 当前地址里的对话号，首页为空
          */
         const autoClaimTick = (chatId) => {
-            if (!chatId) return;
             const target = GM_getValue("cx_doubao_target", "");
             if (target === tabToken) { autoClaimed = true; return; }
             if (autoClaimed) return;
             const ownerAlive = target ? ownerTabAlive(target) : false;
-            // 没绑过：直接认这一页
+            // 没绑过：直接认这一页，不必等到有对话号
             if (!target) {
                 claimBinding();
                 autoClaimed = true;
-                setSta("已自动绑定当前会话", "#34c759");
+                setSta(chatId ? "已自动绑定当前会话" : "已自动绑定当前豆包页", "#34c759");
                 return;
             }
             // 原绑定页已经不在 → 接手
@@ -1037,12 +1037,12 @@
                 setSta("已接手上次绑定", "#34c759");
                 return;
             }
-            // 原绑定页还活着，但本页正显示在用户面前，且连续两次读得到对话号 → 本页接管
+            // 原绑定页还活着，但本页正显示在用户面前，且连续两次可见 → 本页接管
             // 只有原页面已经不再活跃跳动（12 秒没写心跳，多半被冻结）才让位，避免两个窗口互抢
             if (visibleTicks >= 2 && !ownerTicking(target)) {
                 claimBinding();
                 autoClaimed = true;
-                setSta("已自动绑定当前会话（原页面已让出）", "#34c759");
+                setSta("已自动绑定当前页面（原页面已让出）", "#34c759");
             }
         };
 
@@ -1076,7 +1076,8 @@
             GM_setValue("cx_doubao_url", location.href);
             GM_setValue("cx_doubao_bound_at", Date.now());
             const chatId = getChatId();
-            GM_setValue("cx_doubao_chat_id", chatId || "");
+            // 首页没有对话号时保留上次记录的会话号，别把它清空
+            if (chatId) GM_setValue("cx_doubao_chat_id", chatId);
         };
 
         let bindingNotice = "";   // 初始化时给用户的绑定提示
@@ -1084,12 +1085,10 @@
             const target0 = GM_getValue("cx_doubao_target", "");
             const chatIdNow = getChatId();
             if (!target0) {
-                // 没绑过：能在地址里读到对话号，就直接认这一页，不需要手动绑
-                if (chatIdNow) {
-                    claimBinding();
-                    autoClaimed = true;
-                    bindingNotice = "已自动绑定当前会话";
-                }
+                // 没绑过：直接在加载时认这一页，首页（无对话号）也算，不用手动绑
+                claimBinding();
+                autoClaimed = true;
+                bindingNotice = chatIdNow ? "已自动绑定当前会话" : "已自动绑定当前豆包页";
             } else if (target0 !== tabToken) {
                 const ownerChat = GM_getValue("cx_doubao_chat_id", "");
                 if (!anotherDoubaoTabAlive()) {

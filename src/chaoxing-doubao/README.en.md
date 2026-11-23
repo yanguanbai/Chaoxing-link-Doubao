@@ -10,7 +10,7 @@ Extracts the current question from a Chaoxing answer page, hands it to the Douba
 - **Exam pages** read only the currently visible question, so exam navigation and the question-number strip are never sent.
 - Two send modes: question text, or a rendered screenshot for formula and image questions.
 - Opens the Doubao page only when none exists; a page that is already open (even one whose heartbeat stopped because the browser froze it) is never treated as missing, and at most one tab is opened within 60 seconds.
-- Binding is recorded once and reused: the script re-checks the URL every 5 seconds and binds the page automatically as soon as a `/chat/<id>` conversation id is readable (Doubao is a single-page app, so a one-shot check at load never fires); a reopened tab of the same conversation takes over, and an owner tab that is gone or no longer ticking yields.
+- Binding is recorded once and reused: the script re-checks the URL every 5 seconds and binds the page automatically (Doubao is a single-page app, so a one-shot check at load never fires); the home page is bound too, and the conversation id is filled in once a chat opens. A reopened tab of the same conversation takes over, and an owner tab that is gone or no longer ticking yields.
 - Binding is per browser tab: switching Doubao to a `/chat/<id>` conversation keeps the binding valid, so pages are not reopened and signals are not dropped.
 - Delivery states are reported back: received, done, failed and timed out are shown separately on the panel instead of staying on "sent".
 - Parses the JSON in the Doubao reply and writes the options back for the detected question type; a manual fetch button exists on the Doubao panel.
