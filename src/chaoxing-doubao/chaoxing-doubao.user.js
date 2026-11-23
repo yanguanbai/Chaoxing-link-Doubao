@@ -1022,7 +1022,7 @@
             if (!target) {
                 claimBinding();
                 autoClaimed = true;
-                setSta(chatId ? "已自动绑定当前会话" : "已自动绑定当前豆包页", "#34c759");
+                setSta("已自动绑定本页", "#34c759");
                 return;
             }
             // 原绑定页已经不在 → 接手
@@ -1037,7 +1037,7 @@
             if (visibleTicks >= 2 && !ownerTicking(target)) {
                 claimBinding();
                 autoClaimed = true;
-                setSta("已自动绑定当前页面（原页面已让出）", "#34c759");
+                setSta("已绑定本页", "#34c759");
             }
         };
 
@@ -1085,12 +1085,12 @@
                 GM_deleteValue("cx_doubao_open_intent");
                 claimBinding();
                 autoClaimed = true;
-                bindingNotice = "已自动绑定当前页面";
+                bindingNotice = "已自动绑定本页";
             } else if (!target0) {
                 // 没绑过：直接在加载时认这一页，首页（无对话号）也算，不用手动绑
                 claimBinding();
                 autoClaimed = true;
-                bindingNotice = chatIdNow ? "已自动绑定当前会话" : "已自动绑定当前豆包页";
+                bindingNotice = "已自动绑定本页";
             } else if (target0 !== tabToken) {
                 const ownerChat = GM_getValue("cx_doubao_chat_id", "");
                 if (!anotherDoubaoTabAlive()) {
@@ -1154,12 +1154,17 @@
                     box-shadow: 0 8px 24px rgba(0,0,0,0.08);
                     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
                     display: flex; align-items: center; gap: 10px; cursor: grab; user-select: none;
+                    max-width: calc(100vw - 48px); white-space: nowrap;
                 }
                 .db-apple-panel:active { cursor: grabbing; }
-                .db-status-dot { font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 6px; }
+                .db-status-dot {
+                    font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 6px;
+                    flex: 0 0 auto; max-width: 260px; overflow: hidden; text-overflow: ellipsis;
+                }
                 .db-btn {
                     padding: 5px 12px; font-size: 11px; font-weight: 500; border: none; border-radius: 8px;
                     cursor: pointer; transition: all 0.2s; background: rgba(0,0,0,0.05); color: #1d1d1f;
+                    flex: 0 0 auto; white-space: nowrap;
                 }
                 .db-btn:hover { background: rgba(0,0,0,0.08); }
                 .db-btn-primary { background: #007aff; color: white; }
