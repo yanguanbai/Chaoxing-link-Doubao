@@ -9,7 +9,8 @@ Extracts the current question from a Chaoxing answer page, hands it to the Douba
 - **Homework pages** are extracted question by question: only the stem and options are sent, so headers such as question count, full marks, time window and the answer-card strip stay on the page. Screenshots render only the question blocks.
 - **Exam pages** read only the currently visible question, so exam navigation and the question-number strip are never sent.
 - Two send modes: question text, or a rendered screenshot for formula and image questions.
-- Opens the Doubao page when it is not running; the newly opened page picks up the pending message, so it is not processed twice.
+- Opens the Doubao page only when none exists; a page that is already open (even one whose heartbeat stopped because the browser froze it) is never treated as missing, and at most one tab is opened within 60 seconds.
+- Binding is recorded once and reused: on a real conversation page the script reads the `/chat/<id>` conversation id and binds that page automatically; a reopened page with the same conversation takes over the binding, and a page that is merely frozen is never duplicated.
 - Binding is per browser tab: switching Doubao to a `/chat/<id>` conversation keeps the binding valid, so pages are not reopened and signals are not dropped.
 - Delivery states are reported back: received, done, failed and timed out are shown separately on the panel instead of staying on "sent".
 - Parses the JSON in the Doubao reply and writes the options back for the detected question type; a manual fetch button exists on the Doubao panel.
@@ -32,7 +33,7 @@ Extracts the current question from a Chaoxing answer page, hands it to the Douba
 
 ## Usage
 
-1. Open Doubao, sign in, and use the gear menu to bind the current tab; without a binding any Doubao page can take the message.
+1. Open Doubao and sign in. On a conversation page the script binds it automatically; the gear menu still allows a manual bind, a status check and clearing the binding.
 2. Open the Chaoxing answer page and click the rule initialiser.
 3. Send text or a screenshot depending on the question. If Doubao is not open, the message is stored first and the page is opened.
 4. The reply is fetched automatically, or manually from the Doubao panel.

@@ -10,7 +10,7 @@ English version: [README.en.md](README.en.md)
 
 | 脚本 | 用途 | 版本 | 文档与安装 |
 |---|---|---:|---|
-| 学习通豆包助手 | 取当前题目、发送文字或截图、抓取回复、回填答案、页面绑定 | 1.6.3 | [中文](src/chaoxing-doubao/README.md) · [English](src/chaoxing-doubao/README.en.md) · [安装](https://raw.githubusercontent.com/yanguanbai/Chaoxing-link-Doubao/main/src/chaoxing-doubao/chaoxing-doubao.user.js) |
+| 学习通豆包助手 | 取当前题目、发送文字或截图、抓取回复、回填答案、页面绑定 | 1.6.4 | [中文](src/chaoxing-doubao/README.md) · [English](src/chaoxing-doubao/README.en.md) · [安装](https://raw.githubusercontent.com/yanguanbai/Chaoxing-link-Doubao/main/src/chaoxing-doubao/chaoxing-doubao.user.js) |
 | 纯文本粘贴助手 | 简答题编辑器只粘纯文本，图片仍按原生粘贴 | 1.2.2 | [中文](src/chaoxing-paste-helper/README.md) · [English](src/chaoxing-paste-helper/README.en.md) · [安装](https://raw.githubusercontent.com/yanguanbai/Chaoxing-link-Doubao/main/src/chaoxing-paste-helper/chaoxing-paste-helper.user.js) |
 
 两个脚本是两份独立文件，脚本列表里会各占一条记录。主脚本不含粘贴助手逻辑，粘贴助手也不随主脚本安装。

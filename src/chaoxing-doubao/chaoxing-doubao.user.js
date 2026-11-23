@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         学习通豆包全自动答题
 // @namespace    com.chaoxing.doubao.auto
-// @version      1.6.3
+// @version      1.6.4
 // @author       Bart
 // @description  学习通 + 豆包 双向联动全自动答题脚本，支持文字/截图答题、跳过已答题目、自动下一题
 // @match        *://*.chaoxing.com/mooc-ans*
@@ -31,8 +31,15 @@
     const win = unsafeWindow;
     const DOUBAO_PRESENCE_PREFIX = "cx_doubao_presence_";
     const DOUBAO_DEFAULT_URL = "https://www.doubao.com/";
-    // 豆包页心跳超过该时长即视为已关闭（后台标签定时器会被节流到约 1 分钟，阈值必须远大于它）
+    // 豆包页心跳超过该时长即视为"心跳停了"，但停跳不等于页面已关闭：
+    // 后台标签会被浏览器冻结/节流，定时器不再执行，因此还要留一段"疑似仍在"的宽限期
     const PRESENCE_STALE_MS = 120000;
+    // 宽限期：有心跳记录但已停跳，或最近有过真实通信，都按"页面可能还在"处理，不自动开新页
+    const PRESENCE_DORMANT_MS = 30 * 60000;
+    // 自动开页冷却，避免一次发送流程里连开多个标签
+    const OPEN_COOLDOWN_MS = 60000;
+    // 绑定记录的信任期：这期间内有绑定就认为用户开过豆包页，不再自动新开
+    const BINDING_TRUST_MS = 12 * 3600 * 1000;
     // 信号与答案的有效期，超过视为过期，避免旧消息串到新题目
     const SIGNAL_FRESH_MS = 120000;
     const ACK_TIMEOUT_MS = 75000;
@@ -107,30 +114,67 @@
     }
 
     /**
-     * 是否存在可用的豆包页面
-     * 绑定按标签页 token 判定，地址变化（首页 → /chat/<id>）不影响结果
+     * 收集豆包页面的存在证据
+     * @returns {{fresh: boolean, dormant: boolean, tabCount: number, boundRecently: boolean}}
+     *  fresh          心跳新鲜，页面肯定在
+     *  dormant        有心跳记录但已停跳，或最近有过通信，页面可能在（不能据此开新页）
+     *  tabCount       带心跳记录的标签页数量
+     *  boundRecently  近期有绑定记录，说明用户开过豆包页，只是可能被冻结
      */
-    function hasActiveDoubaoPage() {
+    function getDoubaoPresence() {
         const now = Date.now();
         const target = GM_getValue("cx_doubao_target", "");
-        let active = false;
+        const result = { fresh: false, dormant: false, tabCount: 0, boundRecently: false };
+
         GM_listValues().forEach(key => {
             if (!key.startsWith(DOUBAO_PRESENCE_PREFIX)) return;
             const page = GM_getValue(key, null);
-            if (!page || now - page.updatedAt >= PRESENCE_STALE_MS) {
+            if (!page || typeof page.updatedAt !== "number") {
                 GM_deleteValue(key);
                 return;
             }
-            // 已绑定：只认绑定的那个标签页；未绑定：任意豆包页都算可用
-            if (target ? page.token === target : true) active = true;
+            const age = now - page.updatedAt;
+            // 超过宽限期才真正认为页面已关闭
+            if (age >= PRESENCE_DORMANT_MS) {
+                GM_deleteValue(key);
+                return;
+            }
+            // 绑定时只认绑定的那个标签页
+            if (target && page.token !== target) return;
+            result.tabCount += 1;
+            if (age < PRESENCE_STALE_MS) result.fresh = true;
+            else result.dormant = true;
         });
-        return active;
+
+        // 最近一次真实通信（豆包回过接收/完成状态或答案）同样说明页面还在
+        const lastActive = GM_getValue("cx_doubao_last_active", 0);
+        if (!result.fresh && now - lastActive < PRESENCE_DORMANT_MS) result.dormant = true;
+
+        // 有绑定记录且不算太久：页面即便被冻结，也不该由脚本再开一个
+        const boundAt = GM_getValue("cx_doubao_bound_at", 0);
+        if (target && boundAt && now - boundAt < BINDING_TRUST_MS) result.boundRecently = true;
+
+        return result;
     }
 
-    function openDoubaoIfNeeded() {
-        if (hasActiveDoubaoPage()) return false;
+    /**
+     * 按需打开豆包页，已有页面时一律不重复打开
+     * @param {boolean} force 用户明确要求强制新开（需连续两次点击才走到这里）
+     * @returns {'active'|'maybe'|'cooldown'|'opened'} 处理结果
+     */
+    function openDoubaoIfNeeded(force = false) {
+        const { fresh, dormant, tabCount, boundRecently } = getDoubaoPresence();
+        if (fresh) return "active";
+        // 有停跳记录、近期通信过、或近期绑定过：页面可能只是被冻结，绝不能当成"没开"再去开一个
+        if (!force && (dormant || tabCount > 0 || boundRecently)) return "maybe";
+
+        const now = Date.now();
+        const lastOpen = GM_getValue("cx_doubao_last_open", 0);
+        if (now - lastOpen < OPEN_COOLDOWN_MS) return "cooldown";
+
+        GM_setValue("cx_doubao_last_open", now);
         GM_openInTab(getDoubaoUrl(), { active: true, insert: true, setParent: true });
-        return true;
+        return "opened";
     }
 
     /**
@@ -348,10 +392,20 @@
                 GM_setValue("cx_ai_result", ""); // 清空旧答案
                 sendSignal({ type: "init" }, "规则已发送");     // 发送【初始化规则】指令到豆包
             };
+            let forceOpenArmedAt = 0; // 记录"再点一次就强制开"的时刻
             document.getElementById('btn-open-doubao').onclick = () => {
-                if (openDoubaoIfNeeded()) {
+                const armed = Date.now() - forceOpenArmedAt < 3000;
+                const openState = openDoubaoIfNeeded(armed);
+                if (openState === "opened") {
+                    forceOpenArmedAt = 0;
                     setStatus("正在打开豆包...", "#007aff");
+                } else if (openState === "cooldown") {
+                    setStatus("刚打开过豆包，稍后再试", "#ff9500");
+                } else if (openState === "maybe") {
+                    forceOpenArmedAt = Date.now();
+                    setStatus("豆包页可能还开着，先切过去看看；确定关了再点一次强制新开", "#ff9500");
                 } else {
+                    forceOpenArmedAt = 0;
                     setStatus("豆包页面已打开", "#34c759");
                 }
             };
@@ -617,8 +671,13 @@
             pendingSignalId = message.id;
             GM_setValue("cx_ai_signal", message);
 
-            if (openDoubaoIfNeeded()) {
+            const openState = openDoubaoIfNeeded();
+            if (openState === "opened") {
                 setStatus(`${okText}，正在打开豆包...`, "#007aff");
+            } else if (openState === "cooldown") {
+                setStatus(`${okText}，豆包刚开过，先等它加载`, "#ff9500");
+            } else if (openState === "maybe") {
+                setStatus(`${okText}，豆包页可能被冻结，切过去刷新一下`, "#ff9500");
             } else {
                 setStatus(`${okText}，等待豆包接收...`, "#007aff");
             }
@@ -931,25 +990,89 @@
             try { sessionStorage.setItem("cx_doubao_tab_token", tabToken); } catch (e) { }
         }
 
+        // 识别当前地址里的对话号：/chat/<id>，用于自动绑定"专属豆包页"
+        const getChatId = () => {
+            const m = location.pathname.match(/\/chat\/([^/?#]+)/);
+            return m ? m[1] : "";
+        };
+
         const presenceKey = `${DOUBAO_PRESENCE_PREFIX}${tabToken}`;
         const updatePresence = () => {
-            GM_setValue(presenceKey, { token: tabToken, url: location.href, updatedAt: Date.now() });
-            // 绑定在这个标签页时，同步更新"打开豆包"用的地址，避免地址变化后开到旧会话
-            if (GM_getValue("cx_doubao_target", "") === tabToken
-                && GM_getValue("cx_doubao_url", "") !== location.href) {
-                GM_setValue("cx_doubao_url", location.href);
-            }
+            GM_setValue(presenceKey, { token: tabToken, url: location.href, chatId: getChatId(), updatedAt: Date.now() });
+            if (GM_getValue("cx_doubao_target", "") !== tabToken) return;
+            // 绑定在这个标签页时，同步更新"打开豆包"用的地址与对话号，避免地址变化后开到旧会话
+            const chatId = getChatId();
+            if (GM_getValue("cx_doubao_url", "") !== location.href) GM_setValue("cx_doubao_url", location.href);
+            if (chatId && GM_getValue("cx_doubao_chat_id", "") !== chatId) GM_setValue("cx_doubao_chat_id", chatId);
         };
+
+        /** 把当前标签页登记为专属豆包页（自动绑定/接手都走这里） */
+        const claimBinding = () => {
+            GM_setValue("cx_doubao_target", tabToken);
+            GM_setValue("cx_doubao_url", location.href);
+            GM_setValue("cx_doubao_bound_at", Date.now());
+            const chatId = getChatId();
+            GM_setValue("cx_doubao_chat_id", chatId || "");
+        };
+
+        let bindingNotice = "";   // 初始化时给用户的绑定提示
+        try {
+            const target0 = GM_getValue("cx_doubao_target", "");
+            const chatIdNow = getChatId();
+            if (!target0) {
+                // 没绑过：能在地址里读到对话号，就直接认这一页，不需要手动绑
+                if (chatIdNow) {
+                    claimBinding();
+                    bindingNotice = "已自动绑定当前会话";
+                }
+            } else if (target0 !== tabToken) {
+                const ownerChat = GM_getValue("cx_doubao_chat_id", "");
+                if (!anotherDoubaoTabAlive()) {
+                    // 原绑定标签页已经不在了 → 本页接手，仍然是"只记一次"的绑定
+                    claimBinding();
+                    bindingNotice = "已接手上次绑定";
+                } else if (chatIdNow && ownerChat === chatIdNow) {
+                    bindingNotice = "该会话已由另一标签页接管";
+                }
+            }
+        } catch (e) { }
+
         updatePresence();
         const presenceTimer = setInterval(updatePresence, 5000);
         window.addEventListener("pagehide", () => {
             clearInterval(presenceTimer);
             GM_deleteValue(presenceKey);
         }, { once: true });
+
+        // 切换回这个标签页且它已是真实会话、又没有别的豆包页活着时，顺手接管绑定
+        document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState !== "visible" || !getChatId()) return;
+            if (GM_getValue("cx_doubao_target", "") === tabToken || anotherDoubaoTabAlive()) return;
+            claimBinding();
+            setSta("已自动绑定当前会话", "#34c759");
+        });
+
         // 创建右下角悬浮面板
         createPanel();
+        if (bindingNotice) setSta(bindingNotice, bindingNotice.startsWith("已") ? "#34c759" : "#ff9500");
         // 监听学习通发来的指令（文字/图片/初始化）
         listenMsg();
+
+        /**
+         * 是否还有别的豆包标签页在心跳（用于判断绑定是否该被本页接手）
+         * @returns {boolean}
+         */
+        function anotherDoubaoTabAlive() {
+            const now = Date.now();
+            let alive = false;
+            GM_listValues().forEach(key => {
+                if (!key.startsWith(DOUBAO_PRESENCE_PREFIX)) return;
+                const page = GM_getValue(key, null);
+                if (!page || typeof page.updatedAt !== "number") return;
+                if (page.token !== tabToken && now - page.updatedAt < PRESENCE_STALE_MS) alive = true;
+            });
+            return alive;
+        }
         /**
          * 创建豆包页面右下角悬浮面板
          * 包含：状态提示、绑定按钮、手动抓取答案按钮
@@ -1016,23 +1139,28 @@
             const bindingDom = document.getElementById("bind-status");
             const refreshBindingStatus = () => {
                 const target = GM_getValue("cx_doubao_target", "");
+                const chatId = GM_getValue("cx_doubao_chat_id", "");
+                const suffix = chatId ? ` #${chatId.slice(0, 8)}` : "";
                 if (!target) {
-                    bindingDom.textContent = "未绑定（任意豆包页可接手）";
+                    bindingDom.textContent = "未绑定（识别到会话后自动绑定）";
+                } else if (target === tabToken) {
+                    bindingDom.textContent = `已绑定此会话${suffix}（长期沿用）`;
                 } else {
-                    bindingDom.textContent = target === tabToken ? "已绑定此标签页" : "绑定在其他标签页";
+                    bindingDom.textContent = `其他豆包页持有绑定${suffix}`;
                 }
             };
             refreshBindingStatus();
-            // 绑定的是"这个标签页"，豆包换会话地址不影响后续接收
+            // 手动兜底：需要换页时点一次即可，正常情况识别到会话号就会自动绑定
             document.getElementById("bindBtn").onclick = () => {
-                GM_setValue("cx_doubao_target", tabToken);
-                GM_setValue("cx_doubao_url", location.href);
+                claimBinding();
                 refreshBindingStatus();
-                setSta("已绑定当前标签页", "#34c759");
+                setSta("已绑定当前会话", "#34c759");
             };
             document.getElementById("unbindBtn").onclick = () => {
                 GM_setValue("cx_doubao_target", "");
                 GM_setValue("cx_doubao_url", "");
+                GM_setValue("cx_doubao_chat_id", "");
+                GM_deleteValue("cx_doubao_bound_at");
                 refreshBindingStatus();
                 setSta("已清除绑定");
             };
@@ -1137,6 +1265,8 @@
                     const consumed = GM_getValue("cx_ai_signal_consumed", null);
                     if (consumed && consumed.id === data.id && Date.now() - (consumed.at || 0) < SIGNAL_FRESH_MS) return;
                     GM_setValue("cx_ai_signal_consumed", { id: data.id, at: Date.now(), token: tabToken });
+                    // 能收到信号本身就是"这个页面还活着"的证据，供学习通端判断不要重复开页
+                    GM_setValue("cx_doubao_last_active", Date.now());
                     handleMsg(data);
                 } catch (e) { }
             };
@@ -1155,6 +1285,7 @@
         function ack(id, state, msg = "") {
             if (!id) return;
             GM_setValue("cx_ai_ack", { id, state, msg, ts: Date.now() });
+            GM_setValue("cx_doubao_last_active", Date.now());
         }
 
         /**
