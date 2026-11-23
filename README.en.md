@@ -12,7 +12,7 @@ No userscript manager yet? Install [Tampermonkey](https://www.tampermonkey.net/)
 
 | Script | What it does | Version | Docs & Install |
 |---|---|---:|---|
-| Chaoxing Doubao Helper | Reads the current question, sends text or a screenshot, fetches the reply, fills answers, binds the Doubao page | 1.6.4 | [中文](src/chaoxing-doubao/README.md) · [English](src/chaoxing-doubao/README.en.md) · [Install](https://raw.githubusercontent.com/yanguanbai/Chaoxing-link-Doubao/main/src/chaoxing-doubao/chaoxing-doubao.user.js) |
+| Chaoxing Doubao Helper | Reads the current question, sends text or a screenshot, fetches the reply, fills answers, binds the Doubao page | 1.6.5 | [中文](src/chaoxing-doubao/README.md) · [English](src/chaoxing-doubao/README.en.md) · [Install](https://raw.githubusercontent.com/yanguanbai/Chaoxing-link-Doubao/main/src/chaoxing-doubao/chaoxing-doubao.user.js) |
 | Plain-text Paste Helper | Pastes plain text into short-answer editors while leaving image pastes untouched | 1.2.2 | [中文](src/chaoxing-paste-helper/README.md) · [English](src/chaoxing-paste-helper/README.en.md) · [Install](https://raw.githubusercontent.com/yanguanbai/Chaoxing-link-Doubao/main/src/chaoxing-paste-helper/chaoxing-paste-helper.user.js) |
 
 The two scripts are separate files and appear as two entries in the userscript list. The helper is not bundled into the main script.
