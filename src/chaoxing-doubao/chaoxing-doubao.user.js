@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         学习通豆包全自动答题
 // @namespace    com.chaoxing.doubao.auto
-// @version      1.6.5
+// @version      1.6.6
 // @author       Bart
 // @description  学习通 + 豆包 双向联动全自动答题脚本，支持文字/截图答题、跳过已答题目、自动下一题
 // @match        *://*.chaoxing.com/mooc-ans*
@@ -101,6 +101,12 @@
 
     function getDoubaoUrl() {
         return GM_getValue("cx_doubao_url", "") || DOUBAO_DEFAULT_URL;
+    }
+
+    /** 从豆包地址里提取对话号 /chat/<id>，提取不到返回空串 */
+    function chatIdOf(href) {
+        const m = /\/chat\/(\d+)/.exec(href || "");
+        return m ? m[1] : "";
     }
 
     // 清理旧版本遗留的心跳/存在性检测数据，本版本不再使用
@@ -904,7 +910,9 @@
         let isWait = false;    // 是否正在等待AI回复
         let pollTimer;         // 轮询计时器（监听AI输出）
         let watchDog;          // 超时看门狗
-        let statusDom;         // 状态文本容器
+        let statusDom;         // 临时消息文本容器
+        let staTabDom;         // 标签页绑定状态
+        let staChatDom;        // 对话绑定状态
         let currentSignalId = ""; // 当前正在处理的信号 id，手动抓取时沿用
 
         // 标签页标识：sessionStorage 同标签页内跨地址保留，换成 /chat/<id> 也不会变
@@ -915,8 +923,14 @@
             try { sessionStorage.setItem("cx_doubao_tab_token", tabToken); } catch (e) { }
         }
 
-        // 绑定只认本标签页 token：手动在面板点「绑定本页」登记，不做心跳/存在性检测
-        const isBoundHere = () => GM_getValue("cx_doubao_target", "") === tabToken;
+        // 绑定分两个维度：标签页 token、对话号；均由手动点「绑定本页」登记，不做心跳/存在性检测
+        const boundToken = () => GM_getValue("cx_doubao_target", "");
+        const boundUrl = () => GM_getValue("cx_doubao_url", "");
+        const isBoundTab = () => boundToken() !== "" && boundToken() === tabToken;
+        const isBoundChat = () => {
+            const a = chatIdOf(boundUrl()), b = chatIdOf(location.href);
+            return !!a && a === b;
+        };
 
         const bindHere = () => {
             GM_setValue("cx_doubao_target", tabToken);
@@ -935,13 +949,24 @@
         // 监听学习通发来的指令（文字/图片/初始化）
         listenMsg();
 
-        /** 按绑定记录刷新面板状态：一致显示绿色已绑定，否则灰色未绑定 */
+        // SPA 切换会话时地址会变，仅刷新绑定状态展示，不做后台存在性检测
+        let lastDbUrl = location.href;
+        setInterval(() => {
+            if (location.href === lastDbUrl) return;
+            lastDbUrl = location.href;
+            refreshBoundStatus();
+        }, 500);
+
+        /** 按绑定记录刷新面板：标签、对话两行分别判断，对话行带会话号 */
         function refreshBoundStatus() {
-            if (isBoundHere()) {
-                setSta("该页面已绑定", "#34c759");
-            } else {
-                setSta("未绑定", "#86868b");
-            }
+            const tabOk = isBoundTab();
+            setLine(staTabDom, tabOk ? "标签：已绑定" : "标签：未绑定", tabOk ? "#34c759" : "#86868b");
+            const boundId = chatIdOf(boundUrl()), curId = chatIdOf(location.href);
+            const chatOk = !!boundId && boundId === curId;
+            const chatIdLabel = boundId
+                ? (curId ? `#${boundId} / 当前 #${curId}` : `#${boundId} / 当前无对话`)
+                : (curId ? `#${curId}` : "无对话");
+            setLine(staChatDom, `对话：${chatOk ? "已绑定 " : "未绑定 "}${chatIdLabel}`, chatOk ? "#34c759" : "#86868b");
         }
         /**
          * 创建豆包页面右下角悬浮面板
@@ -952,7 +977,7 @@
             const style = document.createElement('style');
             style.innerHTML = `
                 .db-apple-panel {
-                    position: fixed; z-index: 999999; padding: 12px; width: 184px;
+                    position: fixed; z-index: 999999; padding: 12px; width: 212px;
                     background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(20px) saturate(180%);
                     -webkit-backdrop-filter: blur(20px) saturate(180%);
                     border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 16px;
@@ -965,6 +990,7 @@
                     font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 6px;
                     white-space: nowrap;
                 }
+                .db-status-wrap { white-space: normal; line-height: 1.35; }
                 .db-btn {
                     width: 100%; padding: 7px 12px; font-size: 12px; font-weight: 500; border: none; border-radius: 10px;
                     cursor: pointer; transition: all 0.2s; background: rgba(0,0,0,0.05); color: #1d1d1f;
@@ -981,7 +1007,9 @@
             p.id = "db-panel";
             p.className = "db-apple-panel";
             p.innerHTML = `
-                <span id="dbSta" class="db-status-dot" style="color:#86868b">● 未绑定</span>
+                <span id="dbStaTab" class="db-status-dot" style="color:#86868b">● 标签：未绑定</span>
+                <span id="dbStaChat" class="db-status-dot db-status-wrap" style="color:#86868b">● 对话：未绑定</span>
+                <span id="dbSta" class="db-status-dot" style="color:#86868b"></span>
                 <button id="catch-btn" class="db-btn db-btn-primary">手动抓取</button>
                 <button id="bindBtn" class="db-btn">绑定本页</button>
                 <button id="unbindBtn" class="db-btn db-btn-danger">解除绑定</button>
@@ -990,6 +1018,8 @@
             // 赋予面板拖拽与吸附能力 (默认出现在右下角附近)
             makeElementDraggableAndSnappable(p, "db_panel_pos", { bottom: '24px', right: '24px' });
             statusDom = document.getElementById("dbSta");
+            staTabDom = document.getElementById("dbStaTab");
+            staChatDom = document.getElementById("dbStaChat");
             document.getElementById("bindBtn").onclick = () => bindHere();
             document.getElementById("unbindBtn").onclick = () => unbindHere();
             // 手动抓取答案按钮
@@ -1004,6 +1034,13 @@
             if (statusDom) {
                 statusDom.innerText = "● " + text;
                 statusDom.style.color = color;
+            }
+        }
+        /** 写入指定状态行（标签/对话），带圆点前缀 */
+        function setLine(dom, text, color = "#86868b") {
+            if (dom) {
+                dom.innerText = "● " + text;
+                dom.style.color = color;
             }
         }
         /**
@@ -1087,9 +1124,10 @@
                 try {
                     const data = typeof val === "string" ? JSON.parse(val) : val;
                     if (!data.id) return;
-                    // 有绑定就只认绑定的标签页；本页不是绑定页直接忽略，不做自动接手
+                    // 有绑定就只认绑定的标签页与绑定的对话；任一不符直接忽略，不做自动接手
                     const target = GM_getValue("cx_doubao_target", "");
                     if (target && target !== tabToken) return;
+                    if (target && !isBoundChat()) return;
                     const consumed = GM_getValue("cx_ai_signal_consumed", null);
                     if (consumed && consumed.id === data.id && Date.now() - (consumed.at || 0) < SIGNAL_FRESH_MS) return;
                     GM_setValue("cx_ai_signal_consumed", { id: data.id, at: Date.now(), token: tabToken });
@@ -1098,7 +1136,7 @@
             };
             onValueChange("cx_ai_signal", val => receiveSignal(val));
 
-            // 新打开的豆包页接收刚才触发自动打开的消息，忽略过期或已处理消息。
+            // 页面加载时补收尚未过期、未被处理的信号，忽略过期或已处理消息。
             const pending = GM_getValue("cx_ai_signal", "");
             try {
                 const data = typeof pending === "string" ? JSON.parse(pending) : pending;
@@ -1301,6 +1339,10 @@
             const target = GM_getValue("cx_doubao_target", "");
             if (target && target !== tabToken) {
                 setSta("本页不是绑定页，请点「绑定本页」", "#ff3b30");
+                return false;
+            }
+            if (target && !isBoundChat()) {
+                setSta("当前对话与绑定对话不一致", "#ff3b30");
                 return false;
             }
             setSta("抓取中...", "#ff9500");

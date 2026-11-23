@@ -1,6 +1,6 @@
 # Chaoxing Doubao Helper
 
-Current version: `1.6.5` · Author: Bart · [中文](README.md)
+Current version: `1.6.6` · Author: Bart · [中文](README.md)
 
 Extracts the current question from a Chaoxing answer page, hands it to the Doubao web chat for assistance, and writes the result back into the page. The script runs on both sides: the Chaoxing page handles extraction and filling, the Doubao page handles the chat and hands the reply back, and the two halves talk through the userscript manager's cross-tab storage.
 
@@ -10,8 +10,8 @@ Extracts the current question from a Chaoxing answer page, hands it to the Douba
 - **Exam pages** read only the currently visible question, so exam navigation and the question-number strip are never sent.
 - Two send modes: question text, or a rendered screenshot for formula and image questions.
 - The "open Doubao" button opens the bound conversation on a single click (only a 2-second debounce); it does not check whether a page is already open.
-- Binding is manual: click "bind this page" on the Doubao panel to register it as the dedicated page, and the red "unbind" button clears it. When this page matches the binding record the status turns green ("bound"); otherwise it shows "not bound".
-- Binding is per browser tab: switching Doubao to a `/chat/<id>` conversation keeps the binding valid. With no binding record the Chaoxing side will not send and prompts you to bind first.
+- Binding is manual: click "bind this page" on the Doubao panel to register it as the dedicated page, and the red "unbind" button clears it. The panel shows two rows: "tab" judged by the browser tab, and "chat" judged by the `/chat/<id>` conversation id; both the bound and current ids are shown, and a mismatch means "not bound".
+- The tab binding survives a refresh; after switching to another conversation the chat row shows "not bound" and you must click "bind this page" again. With no binding record the Chaoxing side will not send and prompts you to bind first.
 - Delivery states are reported back: received, done, failed and timed out are shown separately on the panel instead of staying on "sent".
 - Parses the JSON in the Doubao reply and writes the options back for the detected question type; a manual fetch button exists on the Doubao panel.
 - The Doubao panel lists three buttons directly: manual fetch, bind this page, unbind.
